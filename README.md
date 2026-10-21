@@ -27,8 +27,10 @@ There are no accounts. The chosen identity is remembered in the browser (localSt
 1. Go to [vercel.com/new](https://vercel.com/new) and import `efutoran/ucla-test`. The framework is detected as Next.js.
 2. Add these environment variables:
    - `NEXT_PUBLIC_SUPABASE_URL`: the Project URL
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: the anon key
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: the anon key (or `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`)
    - `NEXT_PUBLIC_ADMIN_PIN` (optional): a PIN for the admin screen. This only stops people from opening it by accident.
+
+   If you connected Supabase through Vercel's Supabase integration (Storage tab / Marketplace), the Supabase variables are added for you. Check Settings → Environment Variables.
 3. Deploy, then share the URL (or a QR code of it) with the class.
 
 ### 3. Load the roster
