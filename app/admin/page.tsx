@@ -5,23 +5,23 @@ import { supabase } from "@/lib/supabase";
 import { useEventData } from "@/lib/useEventData";
 import { useRole } from "@/lib/useRole";
 import { rankTeams } from "@/lib/rank";
+import { when } from "@/lib/schedule";
 import { downloadCsv, parseInvestors, parseTeams, type InvestorRow, type TeamRow } from "@/lib/csv";
+import type { Investor, Team, Vote } from "@/lib/types";
 import { ErrorBox, LiveDot, Loading } from "@/components/Status";
 
-type Section = "results" | "participation" | "log" | "setup";
+type Section = "results" | "participation" | "log" | "upload" | "manage";
 
 const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
 
 export default function AdminPage() {
   const me = useRole("admin", null);
-  const { slots, teams, investors, votes, counts, settings, loading, error, live, reload, setCurrentSlot } =
-    useEventData();
+  const { teams, investors, votes, counts, settings, loading, error, live, reload, setCurrentTeam } = useEventData();
   const [section, setSection] = useState<Section>("results");
   const [openTeam, setOpenTeam] = useState<string | null>(null);
 
   const investorName = useMemo(() => new Map(investors.map((i) => [i.id, i.name])), [investors]);
   const teamById = useMemo(() => new Map(teams.map((t) => [t.id, t])), [teams]);
-  const slotLabel = useMemo(() => new Map(slots.map((s) => [s.id, s.label])), [slots]);
 
   const participation = useMemo(() => {
     const byInvestor = new Map<string, string[]>();
@@ -41,11 +41,12 @@ export default function AdminPage() {
 
   const exportResults = () =>
     downloadCsv("results.csv", [
-      ["rank", "team", "slot", "thumbs", "voters"],
+      ["rank", "team", "date", "slot", "thumbs", "voters"],
       ...ranked.map((r) => [
         r.rank,
         r.team.name,
-        slotLabel.get(r.team.slot_id) ?? "",
+        r.team.slot_date ?? "",
+        r.team.slot ?? "",
         r.count,
         votes
           .filter((v) => v.team_id === r.team.id)
@@ -64,10 +65,10 @@ export default function AdminPage() {
     ]);
   const exportLog = () =>
     downloadCsv("votes.csv", [
-      ["timestamp", "investor", "team", "slot"],
+      ["timestamp", "investor", "team", "date", "slot"],
       ...log.map((v) => {
         const t = teamById.get(v.team_id);
-        return [v.created_at, investorName.get(v.investor_id) ?? "", t?.name ?? "", t ? slotLabel.get(t.slot_id) ?? "" : ""];
+        return [v.created_at, investorName.get(v.investor_id) ?? "", t?.name ?? "", t?.slot_date ?? "", t?.slot ?? ""];
       }),
     ]);
 
@@ -87,16 +88,16 @@ export default function AdminPage() {
 
       <label className="block rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
         <span className="text-sm font-semibold">Now presenting</span>
-        <span className="block text-xs text-zinc-500">Investor screens jump to this slot.</span>
+        <span className="block text-xs text-zinc-500">Pinned to the top of investors&apos; screens; its votes trigger the celebration.</span>
         <select
-          value={settings?.current_slot_id ?? ""}
-          onChange={(e) => setCurrentSlot(e.target.value || null)}
+          value={settings?.current_team_id ?? ""}
+          onChange={(e) => setCurrentTeam(e.target.value || null)}
           className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
         >
           <option value="">— None —</option>
-          {slots.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label}
+          {teams.map((t) => (
+            <option key={t.id} value={t.id}>
+              {[when(t, true), t.name].filter(Boolean).join(" — ")}
             </option>
           ))}
         </select>
@@ -108,7 +109,8 @@ export default function AdminPage() {
             ["results", "Results"],
             ["participation", "Participation"],
             ["log", "Vote log"],
-            ["setup", "Upload / reset"],
+            ["upload", "Upload"],
+            ["manage", "Delete"],
           ] as [Section, string][]
         ).map(([key, label]) => (
           <button
@@ -138,7 +140,7 @@ export default function AdminPage() {
                     <span className="w-6 text-sm font-bold text-zinc-400">{r.rank}</span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-medium">{r.team.name}</span>
-                      <span className="block text-xs text-zinc-500">{slotLabel.get(r.team.slot_id)}</span>
+                      <span className="block text-xs text-zinc-500">{when(r.team, true)}</span>
                     </span>
                     <span className="font-bold tabular-nums">👍 {r.count}</span>
                     <span className="text-zinc-400">{open ? "▾" : "▸"}</span>
@@ -194,47 +196,57 @@ export default function AdminPage() {
         </Card>
       )}
 
-      {section === "setup" && <Setup onDone={reload} />}
+      {section === "upload" && <Upload onDone={reload} />}
+      {section === "manage" && <Manage teams={teams} investors={investors} votes={votes} onDone={reload} />}
     </div>
   );
 }
 
-function Setup({ onDone }: { onDone: () => void }) {
+function Upload({ onDone }: { onDone: () => void }) {
   const [teamRows, setTeamRows] = useState<TeamRow[] | null>(null);
   const [investorRows, setInvestorRows] = useState<InvestorRow[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-
-  const slotCount = teamRows ? new Set(teamRows.map((r) => r.slot || "Unscheduled")).size : 0;
+  const [formKey, setFormKey] = useState(0);
 
   const submit = async () => {
-    if (!teamRows || !investorRows) return;
-    if (!confirm("This deletes ALL teams, investors and votes and loads the new CSVs. Continue?")) return;
     setBusy(true);
     setMessage(null);
-    const { error } = await supabase.rpc("reset_event", { p_teams: teamRows, p_investors: investorRows });
+    const { data, error } = await supabase.rpc("import_roster", {
+      p_teams: teamRows ?? [],
+      p_investors: investorRows ?? [],
+    });
     setBusy(false);
     if (error) {
       setMessage(`Error: ${error.message}`);
       return;
     }
-    setMessage(`Loaded ${teamRows.length} teams in ${slotCount} slots and ${investorRows.length} investors. Votes cleared.`);
+    const r = data as { teams_added: number; teams_updated: number; investors_added: number; investors_skipped: number };
+    setMessage(
+      `Teams: ${r.teams_added} added, ${r.teams_updated} updated. ` +
+        `Investors: ${r.investors_added} added, ${r.investors_skipped} already existed (kept).`,
+    );
+    setTeamRows(null);
+    setInvestorRows(null);
+    setFormKey((k) => k + 1); // clear the file inputs
     onDone();
   };
 
   return (
-    <Card title="Upload roster & reset">
-      <div className="space-y-4 p-4">
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          Uploading replaces everything: all teams, investors and votes are wiped. Everyone currently signed in is sent
-          back to the sign-in screen.
-        </p>
+    <Card title="Upload teams & investors">
+      <div key={formKey} className="space-y-4 p-4">
+        <ul className="list-disc space-y-1 pl-5 text-sm text-zinc-600 dark:text-zinc-400">
+          <li>New names are added. Nothing is deleted. Use the Delete tab for that.</li>
+          <li>A team with the same name gets its date, slot and description replaced. Its votes are kept.</li>
+          <li>An investor with the same name is skipped, so their votes are kept.</li>
+          <li>Names match regardless of upper/lower case. You can upload just one of the files.</li>
+        </ul>
 
         <FilePicker
           label="Teams CSV"
-          hint="Columns: team, slot, description (optional). Slots appear in the order they first show up."
+          hint="Columns: team, date, slot, description (optional). Date is admin-only, e.g. 10/28."
           onFile={async (f) => setTeamRows(await parseTeams(f))}
-          summary={teamRows && `${teamRows.length} teams in ${slotCount} slots`}
+          summary={teamRows && `${teamRows.length} teams`}
         />
         <FilePicker
           label="Investors CSV"
@@ -244,15 +256,161 @@ function Setup({ onDone }: { onDone: () => void }) {
         />
 
         <button
-          disabled={!teamRows?.length || !investorRows?.length || busy}
+          disabled={(!teamRows?.length && !investorRows?.length) || busy}
           onClick={submit}
-          className="w-full rounded-xl bg-red-600 py-3 font-semibold text-white disabled:opacity-40"
+          className="w-full rounded-xl bg-orange-500 py-3 font-semibold text-white disabled:opacity-40"
         >
-          {busy ? "Resetting…" : "Reset & load"}
+          {busy ? "Uploading…" : "Upload"}
         </button>
-        {message && <p className="text-sm">{message}</p>}
       </div>
+      {message && <p className="px-4 pb-4 text-sm">{message}</p>}
     </Card>
+  );
+}
+
+function Manage({
+  teams,
+  investors,
+  votes,
+  onDone,
+}: {
+  teams: Team[];
+  investors: Investor[];
+  votes: Vote[];
+  onDone: () => void;
+}) {
+  const [teamIds, setTeamIds] = useState<Set<string>>(new Set());
+  const [investorIds, setInvestorIds] = useState<Set<string>>(new Set());
+  const [query, setQuery] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  // Teams grouped by date so a whole old section can be selected at once
+  const byDate = useMemo(() => {
+    const groups = new Map<string, Team[]>();
+    for (const t of teams) {
+      const d = t.slot_date ?? "No date";
+      groups.set(d, [...(groups.get(d) ?? []), t]);
+    }
+    return [...groups.entries()];
+  }, [teams]);
+
+  const votesPerInvestor = useMemo(() => {
+    const c = new Map<string, number>();
+    for (const v of votes) c.set(v.investor_id, (c.get(v.investor_id) ?? 0) + 1);
+    return c;
+  }, [votes]);
+
+  const shownInvestors = investors.filter((i) => i.name.toLowerCase().includes(query.trim().toLowerCase()));
+  const affectedVotes = votes.filter((v) => teamIds.has(v.team_id) || investorIds.has(v.investor_id)).length;
+
+  const toggle = (set: Set<string>, setter: (s: Set<string>) => void, ids: string[], on: boolean) => {
+    const next = new Set(set);
+    for (const id of ids) {
+      if (on) next.add(id);
+      else next.delete(id);
+    }
+    setter(next);
+  };
+
+  const submit = async () => {
+    const msg =
+      `Permanently delete ${teamIds.size} team(s) and ${investorIds.size} investor(s)` +
+      (affectedVotes ? `, plus ${affectedVotes} vote(s) involving them?` : "?");
+    if (!confirm(msg)) return;
+    setBusy(true);
+    const { error } = await supabase.rpc("delete_roster", {
+      p_team_ids: [...teamIds],
+      p_investor_ids: [...investorIds],
+    });
+    setBusy(false);
+    if (error) {
+      alert(`Delete failed: ${error.message}`);
+      return;
+    }
+    setTeamIds(new Set());
+    setInvestorIds(new Set());
+    onDone();
+  };
+
+  const checkbox = "h-5 w-5 shrink-0 accent-red-600";
+
+  return (
+    <div className="space-y-4">
+      <Card title={`Teams (${teamIds.size} selected)`}>
+        {byDate.map(([date, group]) => {
+          const ids = group.map((t) => t.id);
+          const all = ids.every((id) => teamIds.has(id));
+          return (
+            <div key={date} className="border-b border-zinc-200 last:border-0 dark:border-zinc-800">
+              <label className="flex items-center gap-3 bg-zinc-50 px-4 py-2 text-sm font-semibold dark:bg-zinc-950">
+                <input
+                  type="checkbox"
+                  className={checkbox}
+                  checked={all}
+                  onChange={(e) => toggle(teamIds, setTeamIds, ids, e.target.checked)}
+                />
+                {date} <span className="font-normal text-zinc-500">· all {group.length}</span>
+              </label>
+              {group.map((t) => (
+                <label key={t.id} className="flex items-center gap-3 px-4 py-2">
+                  <input
+                    type="checkbox"
+                    className={checkbox}
+                    checked={teamIds.has(t.id)}
+                    onChange={(e) => toggle(teamIds, setTeamIds, [t.id], e.target.checked)}
+                  />
+                  <span className="min-w-0 flex-1 truncate">{t.name}</span>
+                  <span className="text-xs text-zinc-500">{t.slot}</span>
+                </label>
+              ))}
+            </div>
+          );
+        })}
+        {teams.length === 0 && <p className="px-4 py-3 text-zinc-500">No teams.</p>}
+      </Card>
+
+      <Card title={`Investors (${investorIds.size} selected)`}>
+        <div className="flex items-center gap-3 border-b border-zinc-200 px-4 py-2 dark:border-zinc-800">
+          <input
+            type="checkbox"
+            className={checkbox}
+            checked={shownInvestors.length > 0 && shownInvestors.every((i) => investorIds.has(i.id))}
+            onChange={(e) => toggle(investorIds, setInvestorIds, shownInvestors.map((i) => i.id), e.target.checked)}
+          />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Filter by name"
+            className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+          />
+        </div>
+        <div className="max-h-[50vh] overflow-y-auto">
+          {shownInvestors.map((i) => (
+            <label key={i.id} className="flex items-center gap-3 px-4 py-2">
+              <input
+                type="checkbox"
+                className={checkbox}
+                checked={investorIds.has(i.id)}
+                onChange={(e) => toggle(investorIds, setInvestorIds, [i.id], e.target.checked)}
+              />
+              <span className="min-w-0 flex-1 truncate">{i.name}</span>
+              <span className="text-xs text-zinc-500">
+                {votesPerInvestor.get(i.id) ?? 0} vote{votesPerInvestor.get(i.id) === 1 ? "" : "s"} · added {new Date(i.created_at).toLocaleDateString([], { month: "numeric", day: "numeric" })}
+              </span>
+            </label>
+          ))}
+          {shownInvestors.length === 0 && <p className="px-4 py-3 text-zinc-500">No investors.</p>}
+        </div>
+      </Card>
+
+      <button
+        disabled={(!teamIds.size && !investorIds.size) || busy}
+        onClick={submit}
+        className="sticky bottom-4 w-full rounded-xl bg-red-600 py-3 font-semibold text-white shadow-lg disabled:opacity-40"
+      >
+        {busy ? "Deleting…" : `Delete selected (${teamIds.size + investorIds.size})`}
+      </button>
+    </div>
   );
 }
 

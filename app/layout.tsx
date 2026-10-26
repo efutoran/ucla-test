@@ -4,8 +4,8 @@ import VoteCelebration from "@/components/VoteCelebration";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Demo Day Voting",
-  description: "Live investor voting for demo day",
+  title: "'Real' Pitch Event",
+  description: "Live investor voting for the 'Real' Pitch Event",
 };
 
 export const viewport: Viewport = {

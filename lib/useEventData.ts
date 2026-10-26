@@ -2,16 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./supabase";
-import type { Investor, Settings, Slot, Team, Vote } from "./types";
+import { bySchedule } from "./schedule";
+import type { Investor, Settings, Team, Vote } from "./types";
 
 const voteKey = (v: { investor_id: string; team_id: string }) => `${v.investor_id}:${v.team_id}`;
 
 /**
- * Loads slots, teams, investors, votes and settings, and keeps votes/settings live via
- * Supabase Realtime. A change to settings.reset_at (CSV re-upload) triggers a full reload.
+ * Loads teams, investors, votes and settings, and keeps votes/settings live via Supabase
+ * Realtime. A change to settings.roster_updated_at (CSV import or delete) triggers a full reload.
  */
 export function useEventData() {
-  const [slots, setSlots] = useState<Slot[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [investors, setInvestors] = useState<Investor[]>([]);
   const [votes, setVotes] = useState<Map<string, Vote>>(new Map());
@@ -19,28 +19,26 @@ export function useEventData() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [live, setLive] = useState(false);
-  const resetAt = useRef<string | null>(null);
+  const rosterVersion = useRef<string | null>(null);
 
   const reload = useCallback(async () => {
-    const [s, t, i, v, st] = await Promise.all([
-      supabase.from("time_slots").select("*").order("sort_order"),
-      supabase.from("teams").select("*").order("sort_order"),
-      supabase.from("investors").select("*").order("sort_order"),
+    const [t, i, v, st] = await Promise.all([
+      supabase.from("teams").select("*"),
+      supabase.from("investors").select("*").order("name"),
       supabase.from("votes").select("*").limit(100000),
       supabase.from("settings").select("*").eq("id", 1).single(),
     ]);
-    const err = s.error ?? t.error ?? i.error ?? v.error ?? st.error;
+    const err = t.error ?? i.error ?? v.error ?? st.error;
     if (err) {
       setError(err.message);
       setLoading(false);
       return;
     }
-    setSlots(s.data as Slot[]);
-    setTeams(t.data as Team[]);
+    setTeams((t.data as Team[]).sort(bySchedule));
     setInvestors(i.data as Investor[]);
     setVotes(new Map((v.data as Vote[]).map((x) => [voteKey(x), x])));
     setSettings(st.data as Settings);
-    resetAt.current = (st.data as Settings).reset_at;
+    rosterVersion.current = (st.data as Settings).roster_updated_at;
     setError(null);
     setLoading(false);
   }, []);
@@ -70,7 +68,7 @@ export function useEventData() {
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "settings" }, (p) => {
         const st = p.new as Settings;
-        if (st.reset_at !== resetAt.current) reload();
+        if (st.roster_updated_at !== rosterVersion.current) reload();
         else setSettings(st);
       })
       .subscribe((status) => {
@@ -125,13 +123,12 @@ export function useEventData() {
     [votes],
   );
 
-  const setCurrentSlot = useCallback(async (slotId: string | null) => {
-    setSettings((s) => (s ? { ...s, current_slot_id: slotId } : s));
-    await supabase.from("settings").update({ current_slot_id: slotId }).eq("id", 1);
+  const setCurrentTeam = useCallback(async (teamId: string | null) => {
+    setSettings((s) => (s ? { ...s, current_team_id: teamId } : s));
+    await supabase.from("settings").update({ current_team_id: teamId }).eq("id", 1);
   }, []);
 
   return {
-    slots,
     teams,
     investors,
     votes: useMemo(() => [...votes.values()], [votes]),
@@ -144,6 +141,6 @@ export function useEventData() {
     live,
     reload,
     toggleVote,
-    setCurrentSlot,
+    setCurrentTeam,
   };
 }

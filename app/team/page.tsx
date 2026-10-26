@@ -5,10 +5,11 @@ import { useMemo } from "react";
 import { useEventData } from "@/lib/useEventData";
 import { useRole } from "@/lib/useRole";
 import { rankTeams } from "@/lib/rank";
+import { when } from "@/lib/schedule";
 import { ErrorBox, LiveDot, Loading } from "@/components/Status";
 
 export default function TeamPage() {
-  const { slots, teams, investors, votes, counts, loading, error, live } = useEventData();
+  const { teams, investors, votes, counts, loading, error, live } = useEventData();
   const ids = useMemo(() => (loading || error ? null : teams.map((t) => t.id)), [loading, error, teams]);
   const me = useRole("team", ids);
 
@@ -24,20 +25,14 @@ export default function TeamPage() {
   if (error) return <ErrorBox message={error} />;
   if (loading || !me || !team) return <Loading />;
 
-  const slot = slots.find((s) => s.id === team.slot_id);
   const overall = rankTeams(teams, counts).find((r) => r.team.id === team.id);
-  const inSlot = rankTeams(
-    teams.filter((t) => t.slot_id === team.slot_id),
-    counts,
-  ).find((r) => r.team.id === team.id);
-  const slotSize = teams.filter((t) => t.slot_id === team.slot_id).length;
 
   return (
     <div className="space-y-5">
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold">{team.name}</h1>
-          <p className="text-sm text-zinc-500">{slot?.label}</p>
+          {team.slot && <p className="text-sm text-zinc-500">Presenting at {when(team)}</p>}
         </div>
         <LiveDot live={live} />
       </div>
@@ -47,15 +42,9 @@ export default function TeamPage() {
         <p className="mt-1 text-lg font-medium">👍 thumbs up</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 text-center">
-        <div className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-          <p className="text-3xl font-bold">#{inSlot?.rank}</p>
-          <p className="text-sm text-zinc-500">of {slotSize} in slot</p>
-        </div>
-        <div className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-          <p className="text-3xl font-bold">#{overall?.rank}</p>
-          <p className="text-sm text-zinc-500">of {teams.length} overall</p>
-        </div>
+      <div className="rounded-2xl border border-zinc-200 bg-white p-4 text-center dark:border-zinc-800 dark:bg-zinc-900">
+        <p className="text-3xl font-bold">#{overall?.rank}</p>
+        <p className="text-sm text-zinc-500">of {teams.length} teams</p>
       </div>
 
       <section>

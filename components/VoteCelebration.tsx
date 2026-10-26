@@ -14,8 +14,8 @@ const TOAST_MS = 2500;
 let nextId = 0;
 
 /**
- * Mounted once in the root layout, so it plays on every screen. Each thumbs-up for a team in
- * the "now presenting" slot (or any team if no slot is set) sends emojis up the screen and
+ * Mounted once in the root layout, so it plays on every screen. Each thumbs-up for the
+ * "now presenting" team (or any team if none is set) sends emojis up the screen and
  * pops a "+N" toast for that team. Voter names are never shown.
  */
 export default function VoteCelebration() {
@@ -23,7 +23,7 @@ export default function VoteCelebration() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [pops, setPops] = useState<number[]>([]);
   const teams = useRef<Map<string, Team>>(new Map());
-  const currentSlot = useRef<string | null>(null);
+  const currentTeam = useRef<string | null>(null);
   const toastTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
@@ -33,7 +33,7 @@ export default function VoteCelebration() {
         supabase.from("settings").select("*").eq("id", 1).single(),
       ]);
       if (t.data) teams.current = new Map((t.data as Team[]).map((x) => [x.id, x]));
-      if (s.data) currentSlot.current = (s.data as Settings).current_slot_id;
+      if (s.data) currentTeam.current = (s.data as Settings).current_team_id;
     };
 
     const celebrate = (team: Team) => {
@@ -82,11 +82,11 @@ export default function VoteCelebration() {
           load(); // roster may have just been reloaded
           return;
         }
-        if (currentSlot.current && team.slot_id !== currentSlot.current) return;
+        if (currentTeam.current && team.id !== currentTeam.current) return;
         celebrate(team);
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "settings" }, (p) => {
-        currentSlot.current = (p.new as Settings).current_slot_id;
+        currentTeam.current = (p.new as Settings).current_team_id;
         load();
       })
       .subscribe();

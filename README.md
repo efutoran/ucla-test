@@ -1,16 +1,16 @@
-# Demo Day Voting
+# 'Real' Pitch Event
 
-Live thumbs-up voting for demo day, like the one YC investors use. It's a mobile-friendly web app built with Next.js (hosted on Vercel) and Supabase (Postgres + Realtime).
+Live thumbs-up voting for pitch day, like the one YC investors use at demo day. It's a mobile-friendly web app built with Next.js (hosted on Vercel) and Supabase (Postgres + Realtime).
 
 ## Who sees what
 
 | Screen | Who | What they see |
 |---|---|---|
 | `/` Sign in | Everyone | Investors pick their name, teams pick their team, admin enters the password |
-| `/vote` | Investors | Teams grouped by time slot, a 👍 toggle per team, live counts |
-| `/team` | Teams | Their live thumb count, rank in slot and overall, **names of the investors who thumbed them** |
-| `/leaderboard` | Everyone | Live ranking with counts only, filterable by slot. **No voter names.** |
-| `/admin` | Admin | Totals, "now presenting" slot picker, results with voter names, per-investor participation, full vote log, CSV export, roster upload/reset |
+| `/vote` | Investors | The "now presenting" team pinned on top, then every team in presentation order. A 👍 toggle per team and live counts. |
+| `/team` | Teams | Their live thumb count, overall rank, **names of the investors who thumbed them** |
+| `/leaderboard` | Everyone | Live ranking of all teams with counts only. **No voter names.** |
+| `/admin` | Admin | Totals, "now presenting" team picker, results with voter names and dates, per-investor participation, full vote log, CSV export, roster upload, delete teams/investors |
 
 There are no accounts. The chosen identity is remembered in the browser (localStorage). Per the requirements, security is intentionally open: the database accepts reads and writes from anyone with the public key.
 
@@ -19,6 +19,8 @@ There are no accounts. The chosen identity is remembered in the browser (localSt
 ### 1. Supabase
 1. Create a project at [supabase.com](https://supabase.com) (the free tier is fine).
 2. Go to **SQL Editor → New query**, paste the whole of [`supabase/schema.sql`](supabase/schema.sql), and click **Run**.
+
+   **Upgrading an existing install?** Don't re-run `schema.sql`, because it wipes everything. Instead, run each file in [`supabase/migrations/`](supabase/migrations/) that you haven't run yet, in order. They keep your data.
 3. Go to **Project Settings → API** and copy the **Project URL** and the **anon public** key.
 
 > Free Supabase projects pause after about a week with no activity. Open the dashboard a day before the event to make sure it's awake.
@@ -34,16 +36,19 @@ There are no accounts. The chosen identity is remembered in the browser (localSt
 3. Deploy, then share the URL (or a QR code of it) with the class.
 
 ### 3. Load the roster
-Open the app and sign in as **Admin**. Go to **Upload / reset**, choose both CSVs, and press **Reset & load**.
+Open the app and sign in as **Admin**. Go to **Upload**, choose one or both CSVs, and press **Upload**. Uploads never wipe anything:
+- **New names** are added.
+- **A team with the same name** (case-insensitive) gets its date, slot and description replaced. Its votes are kept.
+- **An investor with the same name** is skipped, so their votes and stats are kept.
 
-Every upload wipes all teams, investors and votes and starts from scratch. Anyone who is signed in is sent back to the sign-in screen.
+To remove old sections or dummy data, use the **Delete** tab. You can tick a whole date's teams at once, or pick individual investors. Deleting removes their votes too.
 
-**teams.csv**: `team,slot,description` (description is optional). Slots are ordered by where they first appear in the file.
+**teams.csv**: `team,date,slot,description` (description is optional). There's one team per slot. The date (e.g. `10/28`) only appears on admin screens.
 ```csv
-team,slot,description
-Acme Robotics,10:00 - 10:30,Warehouse robots for small businesses
-Bruin Bites,10:00 - 10:30,Late-night food delivery for campus
-DocuMind,10:30 - 11:00,AI paperwork for clinics
+team,date,slot,description
+Acme Robotics,10/28,10:00,Warehouse robots for small businesses
+Bruin Bites,10/28,10:10,Late-night food delivery for campus
+DocuMind,11/4,10:00,AI paperwork for clinics
 ```
 
 **investors.csv**: `name`
@@ -56,7 +61,7 @@ Jordan Lee
 Sample files are in [`samples/`](samples/).
 
 ## During the event
-- In the admin screen, set **Now presenting** to the current slot. Every investor's phone jumps to that slot.
+- In the admin screen, set **Now presenting** to the team on stage. It's pinned to the top of every investor's screen, and its votes trigger the celebration animation.
 - Counts update on every screen within about a second. Phones that were asleep resync when they're reopened.
 - Afterwards, use **Export CSV** on the Results, Participation and Vote log tabs.
 
@@ -68,6 +73,6 @@ npm run dev                  # http://localhost:3000
 ```
 
 ## How it works
-- **Tables:** `time_slots`, `teams`, `investors`, `votes` (primary key `(investor_id, team_id)`, so there's one thumb per investor per team), and `settings` (holds the current slot and the reset marker).
-- **Realtime:** clients subscribe to inserts and deletes on `votes` and compute the counts locally. That's at most about 4,000 rows for 100 investors × 40 teams.
-- **Reset:** `reset_event(teams, investors)` truncates and reloads everything in one transaction, then bumps `settings.reset_at`, which tells every client to reload.
+- **Tables:** `teams` (with `slot_date` and `slot`), `investors`, `votes` (primary key `(investor_id, team_id)`, so there's one thumb per investor per team), and `settings` (holds the now-presenting team and a roster version).
+- **Realtime:** clients subscribe to inserts and deletes on `votes` and compute the counts locally.
+- **Roster changes:** `import_roster(teams, investors)` adds or updates rows, and `delete_roster(team_ids, investor_ids)` deletes rows and their votes. Both bump `settings.roster_updated_at`, which tells every open client to reload.
