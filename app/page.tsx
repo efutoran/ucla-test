@@ -2,12 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { adminLogin } from "@/lib/adminAuth";
 import { useIdentity } from "@/lib/identity";
 import { useEventData } from "@/lib/useEventData";
 import { Empty, ErrorBox, Loading } from "@/components/Status";
 
 type Tab = "investor" | "team" | "admin";
-const ADMIN_PIN = process.env.NEXT_PUBLIC_ADMIN_PIN ?? "";
 
 export default function SignIn() {
   const router = useRouter();
@@ -15,13 +15,25 @@ export default function SignIn() {
   const { slots, teams, investors, loading, error } = useEventData();
   const [tab, setTab] = useState<Tab>("investor");
   const [query, setQuery] = useState("");
-  const [pin, setPin] = useState("");
+  const [password, setPassword] = useState("");
+  const [adminError, setAdminError] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  // /admin redirects here with ?admin=1 when the password cookie is missing
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has("admin")) setTab("admin");
+  }, []);
 
   // Already signed in → go straight to your screen
   useEffect(() => {
     if (!loaded || !identity) return;
+    // Sent back from /admin without a valid password cookie: drop the stale admin identity
+    if (identity.role === "admin" && new URLSearchParams(window.location.search).has("admin")) {
+      setIdentity(null);
+      return;
+    }
     router.replace(identity.role === "investor" ? "/vote" : identity.role === "team" ? "/team" : "/admin");
-  }, [loaded, identity, router]);
+  }, [loaded, identity, router, setIdentity]);
 
   const filteredInvestors = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -112,27 +124,35 @@ export default function SignIn() {
       {tab === "admin" && (
         <form
           className="space-y-3"
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
-            if (ADMIN_PIN && pin !== ADMIN_PIN) {
-              alert("Wrong PIN");
+            setChecking(true);
+            setAdminError(null);
+            const result = await adminLogin(password);
+            setChecking(false);
+            if (!result.ok) {
+              setAdminError(result.error);
               return;
             }
+            window.history.replaceState(null, "", "/"); // drop ?admin=1 so the stale-identity check doesn't fire
             setIdentity({ role: "admin" });
           }}
         >
-          {ADMIN_PIN && (
-            <input
-              value={pin}
-              onChange={(e) => setPin(e.target.value)}
-              type="password"
-              inputMode="numeric"
-              placeholder="Admin PIN"
-              className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-base outline-none focus:border-orange-500 dark:border-zinc-700 dark:bg-zinc-900"
-            />
-          )}
-          <button className="w-full rounded-xl bg-orange-500 py-3 font-semibold text-white active:bg-orange-600">
-            Continue as admin
+          <input
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            type="password"
+            autoComplete="current-password"
+            placeholder="Admin password"
+            required
+            className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-base outline-none focus:border-orange-500 dark:border-zinc-700 dark:bg-zinc-900"
+          />
+          {adminError && <p className="text-sm text-red-600 dark:text-red-400">{adminError}</p>}
+          <button
+            disabled={checking}
+            className="w-full rounded-xl bg-orange-500 py-3 font-semibold text-white active:bg-orange-600 disabled:opacity-50"
+          >
+            {checking ? "Checking…" : "Sign in as admin"}
           </button>
         </form>
       )}

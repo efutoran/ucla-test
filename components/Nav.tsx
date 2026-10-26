@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useIdentity } from "@/lib/identity";
+import { adminLogout } from "@/lib/adminAuth";
 
 export default function Nav() {
   const { identity, setIdentity } = useIdentity();
@@ -36,7 +37,8 @@ export default function Nav() {
         ))}
         {identity && (
           <button
-            onClick={() => {
+            onClick={async () => {
+              if (identity.role === "admin") await adminLogout();
               setIdentity(null);
               router.push("/");
             }}
