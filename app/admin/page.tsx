@@ -37,6 +37,10 @@ export default function AdminPage() {
   if (loading || !me) return <Loading />;
 
   const ranked = rankTeams(teams, counts);
+  // teams is already in presentation order (date, then slot)
+  const currentIndex = teams.findIndex((t) => t.id === settings?.current_team_id);
+  const nextTeam = currentIndex === -1 ? teams[0] : teams[currentIndex + 1];
+  const prevTeam = currentIndex > 0 ? teams[currentIndex - 1] : undefined;
   const participated = participation.filter((p) => p.teamIds.length > 0).length;
 
   const exportResults = () =>
@@ -86,10 +90,13 @@ export default function AdminPage() {
         <Stat label="Total thumbs" value={votes.length} />
       </div>
 
-      <label className="block rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-        <span className="text-sm font-semibold">Now presenting</span>
+      <div className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+        <label htmlFor="now-presenting" className="text-sm font-semibold">
+          Now presenting
+        </label>
         <span className="block text-xs text-zinc-500">Pinned to the top of investors&apos; screens; its votes trigger the celebration.</span>
         <select
+          id="now-presenting"
           value={settings?.current_team_id ?? ""}
           onChange={(e) => setCurrentTeam(e.target.value || null)}
           className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
@@ -101,7 +108,24 @@ export default function AdminPage() {
             </option>
           ))}
         </select>
-      </label>
+        <div className="mt-3 flex gap-2">
+          <button
+            onClick={() => prevTeam && setCurrentTeam(prevTeam.id)}
+            disabled={!prevTeam}
+            className="rounded-xl border border-zinc-300 px-4 py-3 font-semibold disabled:opacity-40 dark:border-zinc-700"
+            aria-label="Previous team"
+          >
+            ◀
+          </button>
+          <button
+            onClick={() => nextTeam && setCurrentTeam(nextTeam.id)}
+            disabled={!nextTeam}
+            className="min-w-0 flex-1 rounded-xl bg-orange-500 px-4 py-3 font-semibold text-white active:bg-orange-600 disabled:opacity-40"
+          >
+            <span className="block truncate">{nextTeam ? `Next team: ${nextTeam.name} ▶` : "Last team"}</span>
+          </button>
+        </div>
+      </div>
 
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4">
         {(
