@@ -15,3 +15,6 @@ export type Identity =
   | { role: "investor"; id: string; name: string }
   | { role: "team"; id: string; name: string }
   | { role: "admin" };
+
+/** "full" = ADMIN_PASSWORD, "view" = VIEWER_PASSWORD (read-only admin console). */
+export type AdminAccess = "full" | "view";

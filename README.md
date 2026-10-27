@@ -31,6 +31,7 @@ There are no accounts. The chosen identity is remembered in the browser (localSt
    - `NEXT_PUBLIC_SUPABASE_URL`: the Project URL
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: the anon key (or `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`)
    - `ADMIN_PASSWORD` (required): the admin screen's password. It's checked on the server and never sent to browsers.
+   - `VIEWER_PASSWORD` (optional): a second password that opens the admin screen in **view-only** mode. Viewers can see results, participation and the vote log (and export them), but can't upload, delete, change the presenting team, or vote.
 
    If you connected Supabase through Vercel's Supabase integration (Storage tab / Marketplace), the Supabase variables are added for you. Check Settings → Environment Variables.
 3. Deploy, then share the URL (or a QR code of it) with the class.

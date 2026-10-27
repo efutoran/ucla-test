@@ -2,12 +2,14 @@
 
 import { createHash, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import type { AdminAccess } from "./types";
 
 const COOKIE = "demo-day-admin";
 
-/** Cookie value proving the admin password was entered; changes if the password changes. */
-function token(password: string) {
-  return createHash("sha256").update(`demo-day-admin:${password}`).digest("hex");
+/** Cookie value proving which password was entered; changes if that password changes. */
+function token(access: AdminAccess, password: string) {
+  const kind = access === "full" ? "admin" : "viewer";
+  return createHash("sha256").update(`demo-day-${kind}:${password}`).digest("hex");
 }
 
 function same(a: string, b: string) {
@@ -16,26 +18,39 @@ function same(a: string, b: string) {
   return x.length === y.length && timingSafeEqual(x, y);
 }
 
-export async function adminLogin(password: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  const expected = process.env.ADMIN_PASSWORD;
-  if (!expected) return { ok: false, error: "ADMIN_PASSWORD isn't set on the server (Vercel → Settings → Environment Variables)." };
-  if (!same(password, expected)) return { ok: false, error: "Wrong password" };
-  (await cookies()).set(COOKIE, token(expected), {
+/** ADMIN_PASSWORD gives full access; VIEWER_PASSWORD gives a view-only admin console. */
+export async function adminLogin(
+  password: string,
+): Promise<{ ok: true; access: AdminAccess } | { ok: false; error: string }> {
+  const admin = process.env.ADMIN_PASSWORD;
+  const viewer = process.env.VIEWER_PASSWORD;
+  if (!admin && !viewer)
+    return { ok: false, error: "ADMIN_PASSWORD isn't set on the server (Vercel → Settings → Environment Variables)." };
+
+  const access: AdminAccess | null =
+    admin && same(password, admin) ? "full" : viewer && same(password, viewer) ? "view" : null;
+  if (!access) return { ok: false, error: "Wrong password" };
+
+  (await cookies()).set(COOKIE, token(access, access === "full" ? admin! : viewer!), {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 24 * 30,
   });
-  return { ok: true };
+  return { ok: true, access };
 }
 
 export async function adminLogout() {
   (await cookies()).delete(COOKIE);
 }
 
-export async function isAdmin() {
-  const expected = process.env.ADMIN_PASSWORD;
+export async function getAdminAccess(): Promise<AdminAccess | null> {
   const value = (await cookies()).get(COOKIE)?.value;
-  return !!expected && !!value && same(value, token(expected));
+  if (!value) return null;
+  const admin = process.env.ADMIN_PASSWORD;
+  const viewer = process.env.VIEWER_PASSWORD;
+  if (admin && same(value, token("full", admin))) return "full";
+  if (viewer && same(value, token("view", viewer))) return "view";
+  return null;
 }

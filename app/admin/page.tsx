@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useEventData } from "@/lib/useEventData";
 import { useRole } from "@/lib/useRole";
+import { useAdminAccess } from "@/lib/adminAccess";
 import { rankTeams } from "@/lib/rank";
 import { when } from "@/lib/schedule";
 import { downloadCsv, parseInvestors, parseTeams, type InvestorRow, type TeamRow } from "@/lib/csv";
@@ -22,6 +23,7 @@ export default function AdminPage() {
   const [section, setSection] = useState<Section>("results");
   const [openTeam, setOpenTeam] = useState<string | null>(null);
   const audience = useAudienceCounts();
+  const canEdit = useAdminAccess() === "full";
 
   const investorName = useMemo(() => new Map(investors.map((i) => [i.id, i.name])), [investors]);
   const teamById = useMemo(() => new Map(teams.map((t) => [t.id, t])), [teams]);
@@ -42,6 +44,7 @@ export default function AdminPage() {
   const ranked = rankTeams(teams, counts);
   // teams is already in presentation order (date, then slot)
   const currentIndex = teams.findIndex((t) => t.id === settings?.current_team_id);
+  const presentingTeam = teams[currentIndex];
   const nextTeam = currentIndex === -1 ? teams[0] : teams[currentIndex + 1];
   const prevTeam = currentIndex > 0 ? teams[currentIndex - 1] : undefined;
   const participated = participation.filter((p) => p.teamIds.length > 0).length;
@@ -83,7 +86,14 @@ export default function AdminPage() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Admin</h1>
+        <h1 className="text-xl font-bold">
+          Admin
+          {!canEdit && (
+            <span className="ml-2 rounded-full bg-zinc-200 px-2 py-0.5 align-middle text-xs font-semibold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+              View only
+            </span>
+          )}
+        </h1>
         <LiveDot live={live} />
       </div>
 
@@ -94,50 +104,67 @@ export default function AdminPage() {
         <Stat label="Total thumbs" value={votes.length} />
       </div>
 
-      <div className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-        <label htmlFor="now-presenting" className="text-sm font-semibold">
-          Now presenting
-        </label>
-        <span className="block text-xs text-zinc-500">Pinned to the top of investors&apos; screens; its votes trigger the celebration.</span>
-        <select
-          id="now-presenting"
-          value={settings?.current_team_id ?? ""}
-          onChange={(e) => setCurrentTeam(e.target.value || null)}
-          className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
-        >
-          <option value="">— None —</option>
-          {teams.map((t) => (
-            <option key={t.id} value={t.id}>
-              {[when(t, true), t.name].filter(Boolean).join(" — ")}
-            </option>
-          ))}
-        </select>
-        <div className="mt-3 flex gap-2">
-          <button
-            onClick={() => prevTeam && setCurrentTeam(prevTeam.id)}
-            disabled={!prevTeam}
-            className="rounded-xl border border-zinc-300 px-4 py-3 font-semibold disabled:opacity-40 dark:border-zinc-700"
-            aria-label="Previous team"
+      {canEdit && (
+        <div className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+          <label htmlFor="now-presenting" className="text-sm font-semibold">
+            Now presenting
+          </label>
+          <span className="block text-xs text-zinc-500">Pinned to the top of investors&apos; screens; its votes trigger the celebration.</span>
+          <select
+            id="now-presenting"
+            value={settings?.current_team_id ?? ""}
+            onChange={(e) => setCurrentTeam(e.target.value || null)}
+            className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
           >
-            ◀
-          </button>
-          <button
-            onClick={() => nextTeam && setCurrentTeam(nextTeam.id)}
-            disabled={!nextTeam}
-            className="min-w-0 flex-1 rounded-xl bg-orange-500 px-4 py-3 font-semibold text-white active:bg-orange-600 disabled:opacity-40"
-          >
-            <span className="block truncate">{nextTeam ? `Next team: ${nextTeam.name} ▶` : "Last team"}</span>
-          </button>
+            <option value="">— None —</option>
+            {teams.map((t) => (
+              <option key={t.id} value={t.id}>
+                {[when(t, true), t.name].filter(Boolean).join(" — ")}
+              </option>
+            ))}
+          </select>
+          <div className="mt-3 flex gap-2">
+            <button
+              onClick={() => prevTeam && setCurrentTeam(prevTeam.id)}
+              disabled={!prevTeam}
+              className="rounded-xl border border-zinc-300 px-4 py-3 font-semibold disabled:opacity-40 dark:border-zinc-700"
+              aria-label="Previous team"
+            >
+              ◀
+            </button>
+            <button
+              onClick={() => nextTeam && setCurrentTeam(nextTeam.id)}
+              disabled={!nextTeam}
+              className="min-w-0 flex-1 rounded-xl bg-orange-500 px-4 py-3 font-semibold text-white active:bg-orange-600 disabled:opacity-40"
+            >
+              <span className="block truncate">{nextTeam ? `Next team: ${nextTeam.name} ▶` : "Last team"}</span>
+            </button>
+          </div>
+          <AdminThumb
+            team={presentingTeam}
+            investors={investors}
+            count={counts.get(settings?.current_team_id ?? "") ?? 0}
+            hasVoted={hasVoted}
+            toggleVote={toggleVote}
+            onAdded={reload}
+          />
         </div>
-        <AdminThumb
-          team={teams.find((t) => t.id === settings?.current_team_id)}
-          investors={investors}
-          count={counts.get(settings?.current_team_id ?? "") ?? 0}
-          hasVoted={hasVoted}
-          toggleVote={toggleVote}
-          onAdded={reload}
-        />
-      </div>
+      )}
+      {!canEdit && (
+        <div className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+          <p className="text-sm font-semibold">Now presenting</p>
+          <p className="mt-1 text-lg">
+            {presentingTeam ? (
+              <>
+                <b>{presentingTeam.name}</b> <span className="text-sm text-zinc-500">{when(presentingTeam, true)}</span>
+              </>
+            ) : (
+              <span className="text-zinc-500">— None —</span>
+            )}
+          </p>
+          <p className="mt-1 text-sm text-zinc-500">👍 {counts.get(settings?.current_team_id ?? "") ?? 0}</p>
+        </div>
+      )}
 
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4">
         {(
@@ -148,7 +175,9 @@ export default function AdminPage() {
             ["upload", "Upload"],
             ["manage", "Delete"],
           ] as [Section, string][]
-        ).map(([key, label]) => (
+        )
+          .filter(([key]) => canEdit || (key !== "upload" && key !== "manage"))
+          .map(([key, label]) => (
           <button
             key={key}
             onClick={() => setSection(key)}
@@ -238,8 +267,8 @@ export default function AdminPage() {
         </Card>
       )}
 
-      {section === "upload" && <Upload onDone={reload} />}
-      {section === "manage" && <Manage teams={teams} investors={investors} votes={votes} onDone={reload} />}
+      {canEdit && section === "upload" && <Upload onDone={reload} />}
+      {canEdit && section === "manage" && <Manage teams={teams} investors={investors} votes={votes} onDone={reload} />}
     </div>
   );
 }

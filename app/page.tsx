@@ -138,7 +138,7 @@ export default function SignIn() {
             onChange={(e) => setPassword(e.target.value)}
             type="password"
             autoComplete="current-password"
-            placeholder="Admin password"
+            placeholder="Admin or view-only password"
             required
             className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-base outline-none focus:border-orange-500 dark:border-zinc-700 dark:bg-zinc-900"
           />
