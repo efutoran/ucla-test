@@ -6,7 +6,7 @@ import { useEventData } from "@/lib/useEventData";
 import { useRole } from "@/lib/useRole";
 import { useAdminAccess } from "@/lib/adminAccess";
 import { isHiddenFromViewer } from "@/lib/reserved";
-import { recordWatching } from "@/lib/audience";
+import { AUDIENCE_RECORDED, recordWatching } from "@/lib/audience";
 import { rankTeams } from "@/lib/rank";
 import { when } from "@/lib/schedule";
 import { downloadCsv, parseInvestors, parseTeams, type InvestorRow, type TeamRow } from "@/lib/csv";
@@ -282,7 +282,10 @@ export default function AdminPage() {
   );
 }
 
-/** Rows of `audience` (who watched which presentation), refreshed every 15s while open. */
+/**
+ * Rows of `audience` (who watched which presentation). Refreshes right after this browser
+ * records one, and every 5s for everyone else's.
+ */
 function useAudienceRows() {
   const [rows, setRows] = useState<{ team_id: string; investor_id: string }[]>([]);
   useEffect(() => {
@@ -291,8 +294,12 @@ function useAudienceRows() {
       if (data) setRows(data as { team_id: string; investor_id: string }[]);
     };
     load();
-    const timer = setInterval(load, 15000);
-    return () => clearInterval(timer);
+    const timer = setInterval(load, 5000);
+    window.addEventListener(AUDIENCE_RECORDED, load);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener(AUDIENCE_RECORDED, load);
+    };
   }, []);
   return rows;
 }
