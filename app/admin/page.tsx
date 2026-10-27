@@ -96,6 +96,11 @@ export default function AdminPage() {
         </h1>
         <LiveDot live={live} />
       </div>
+      {!canEdit && (
+        <p className="-mt-3 text-sm text-zinc-500">
+          You can look around everything, but buttons that change the event are turned off.
+        </p>
+      )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Teams" value={teams.length} />
@@ -104,67 +109,52 @@ export default function AdminPage() {
         <Stat label="Total thumbs" value={votes.length} />
       </div>
 
-      {canEdit && (
-        <div className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-          <label htmlFor="now-presenting" className="text-sm font-semibold">
-            Now presenting
-          </label>
-          <span className="block text-xs text-zinc-500">Pinned to the top of investors&apos; screens; its votes trigger the celebration.</span>
-          <select
-            id="now-presenting"
-            value={settings?.current_team_id ?? ""}
-            onChange={(e) => setCurrentTeam(e.target.value || null)}
-            className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
+      <div className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+        <label htmlFor="now-presenting" className="text-sm font-semibold">
+          Now presenting
+        </label>
+        <span className="block text-xs text-zinc-500">Pinned to the top of investors&apos; screens; its votes trigger the celebration.</span>
+        <select
+          id="now-presenting"
+          value={settings?.current_team_id ?? ""}
+          onChange={(e) => canEdit && setCurrentTeam(e.target.value || null)}
+          disabled={!canEdit}
+          className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950"
+        >
+          <option value="">— None —</option>
+          {teams.map((t) => (
+            <option key={t.id} value={t.id}>
+              {[when(t, true), t.name].filter(Boolean).join(" — ")}
+            </option>
+          ))}
+        </select>
+        <div className="mt-3 flex gap-2">
+          <button
+            onClick={() => canEdit && prevTeam && setCurrentTeam(prevTeam.id)}
+            disabled={!canEdit || !prevTeam}
+            className="rounded-xl border border-zinc-300 px-4 py-3 font-semibold disabled:opacity-40 dark:border-zinc-700"
+            aria-label="Previous team"
           >
-            <option value="">— None —</option>
-            {teams.map((t) => (
-              <option key={t.id} value={t.id}>
-                {[when(t, true), t.name].filter(Boolean).join(" — ")}
-              </option>
-            ))}
-          </select>
-          <div className="mt-3 flex gap-2">
-            <button
-              onClick={() => prevTeam && setCurrentTeam(prevTeam.id)}
-              disabled={!prevTeam}
-              className="rounded-xl border border-zinc-300 px-4 py-3 font-semibold disabled:opacity-40 dark:border-zinc-700"
-              aria-label="Previous team"
-            >
-              ◀
-            </button>
-            <button
-              onClick={() => nextTeam && setCurrentTeam(nextTeam.id)}
-              disabled={!nextTeam}
-              className="min-w-0 flex-1 rounded-xl bg-orange-500 px-4 py-3 font-semibold text-white active:bg-orange-600 disabled:opacity-40"
-            >
-              <span className="block truncate">{nextTeam ? `Next team: ${nextTeam.name} ▶` : "Last team"}</span>
-            </button>
-          </div>
-          <AdminThumb
-            team={presentingTeam}
-            investors={investors}
-            count={counts.get(settings?.current_team_id ?? "") ?? 0}
-            hasVoted={hasVoted}
-            toggleVote={toggleVote}
-            onAdded={reload}
-          />
+            ◀
+          </button>
+          <button
+            onClick={() => canEdit && nextTeam && setCurrentTeam(nextTeam.id)}
+            disabled={!canEdit || !nextTeam}
+            className="min-w-0 flex-1 rounded-xl bg-orange-500 px-4 py-3 font-semibold text-white active:bg-orange-600 disabled:opacity-40"
+          >
+            <span className="block truncate">{nextTeam ? `Next team: ${nextTeam.name} ▶` : "Last team"}</span>
+          </button>
         </div>
-      )}
-      {!canEdit && (
-        <div className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-          <p className="text-sm font-semibold">Now presenting</p>
-          <p className="mt-1 text-lg">
-            {presentingTeam ? (
-              <>
-                <b>{presentingTeam.name}</b> <span className="text-sm text-zinc-500">{when(presentingTeam, true)}</span>
-              </>
-            ) : (
-              <span className="text-zinc-500">— None —</span>
-            )}
-          </p>
-          <p className="mt-1 text-sm text-zinc-500">👍 {counts.get(settings?.current_team_id ?? "") ?? 0}</p>
-        </div>
-      )}
+        <AdminThumb
+          team={presentingTeam}
+          investors={investors}
+          count={counts.get(settings?.current_team_id ?? "") ?? 0}
+          hasVoted={hasVoted}
+          toggleVote={toggleVote}
+          onAdded={reload}
+          readOnly={!canEdit}
+        />
+      </div>
 
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4">
         {(
@@ -176,7 +166,6 @@ export default function AdminPage() {
             ["manage", "Delete"],
           ] as [Section, string][]
         )
-          .filter(([key]) => canEdit || (key !== "upload" && key !== "manage"))
           .map(([key, label]) => (
           <button
             key={key}
@@ -267,8 +256,10 @@ export default function AdminPage() {
         </Card>
       )}
 
-      {canEdit && section === "upload" && <Upload onDone={reload} />}
-      {canEdit && section === "manage" && <Manage teams={teams} investors={investors} votes={votes} onDone={reload} />}
+      {section === "upload" && <Upload onDone={reload} readOnly={!canEdit} />}
+      {section === "manage" && (
+        <Manage teams={teams} investors={investors} votes={votes} onDone={reload} readOnly={!canEdit} />
+      )}
     </div>
   );
 }
@@ -313,6 +304,7 @@ function AdminThumb({
   hasVoted,
   toggleVote,
   onAdded,
+  readOnly,
 }: {
   team: Team | undefined;
   investors: Investor[];
@@ -320,6 +312,7 @@ function AdminThumb({
   hasVoted: (investorId: string, teamId: string) => boolean;
   toggleVote: (investorId: string, teamId: string) => void;
   onAdded: () => void;
+  readOnly: boolean;
 }) {
   const [voterId, setVoterIdState] = useState("");
 
@@ -363,6 +356,7 @@ function AdminThumb({
           id="admin-voter"
           value={voter ? voter.id : ""}
           onChange={(e) => (e.target.value === ADD_NEW ? addName() : setVoterId(e.target.value))}
+          disabled={readOnly}
           className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
         >
           <option value="">— Vote as… —</option>
@@ -374,12 +368,16 @@ function AdminThumb({
           <option value={ADD_NEW}>+ Add my name…</option>
         </select>
       </div>
-      <ThumbButton on={on} disabled={!voter || !team} onClick={() => voter && team && toggleVote(voter.id, team.id)} />
+      <ThumbButton
+        on={on}
+        disabled={readOnly || !voter || !team}
+        onClick={() => !readOnly && voter && team && toggleVote(voter.id, team.id)}
+      />
     </div>
   );
 }
 
-function Upload({ onDone }: { onDone: () => void }) {
+function Upload({ onDone, readOnly }: { onDone: () => void; readOnly: boolean }) {
   const [teamRows, setTeamRows] = useState<TeamRow[] | null>(null);
   const [investorRows, setInvestorRows] = useState<InvestorRow[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -387,6 +385,7 @@ function Upload({ onDone }: { onDone: () => void }) {
   const [formKey, setFormKey] = useState(0);
 
   const submit = async () => {
+    if (readOnly) return;
     setBusy(true);
     setMessage(null);
     const { data, error } = await supabase.rpc("import_roster", {
@@ -433,11 +432,11 @@ function Upload({ onDone }: { onDone: () => void }) {
         />
 
         <button
-          disabled={(!teamRows?.length && !investorRows?.length) || busy}
+          disabled={readOnly || (!teamRows?.length && !investorRows?.length) || busy}
           onClick={submit}
           className="w-full rounded-xl bg-orange-500 py-3 font-semibold text-white disabled:opacity-40"
         >
-          {busy ? "Uploading…" : "Upload"}
+          {readOnly ? "Upload (view only)" : busy ? "Uploading…" : "Upload"}
         </button>
       </div>
       {message && <p className="px-4 pb-4 text-sm">{message}</p>}
@@ -450,11 +449,13 @@ function Manage({
   investors,
   votes,
   onDone,
+  readOnly,
 }: {
   teams: Team[];
   investors: Investor[];
   votes: Vote[];
   onDone: () => void;
+  readOnly: boolean;
 }) {
   const [teamIds, setTeamIds] = useState<Set<string>>(new Set());
   const [investorIds, setInvestorIds] = useState<Set<string>>(new Set());
@@ -490,6 +491,7 @@ function Manage({
   };
 
   const submit = async () => {
+    if (readOnly) return;
     const msg =
       `Permanently delete ${teamIds.size} team(s) and ${investorIds.size} investor(s)` +
       (affectedVotes ? `, plus ${affectedVotes} vote(s) involving them?` : "?");
@@ -581,11 +583,15 @@ function Manage({
       </Card>
 
       <button
-        disabled={(!teamIds.size && !investorIds.size) || busy}
+        disabled={readOnly || (!teamIds.size && !investorIds.size) || busy}
         onClick={submit}
         className="sticky bottom-4 w-full rounded-xl bg-red-600 py-3 font-semibold text-white shadow-lg disabled:opacity-40"
       >
-        {busy ? "Deleting…" : `Delete selected (${teamIds.size + investorIds.size})`}
+        {readOnly
+          ? `Delete selected (${teamIds.size + investorIds.size}) — view only`
+          : busy
+            ? "Deleting…"
+            : `Delete selected (${teamIds.size + investorIds.size})`}
       </button>
     </div>
   );
