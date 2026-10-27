@@ -9,9 +9,9 @@ import { when } from "@/lib/schedule";
 import { downloadCsv, parseInvestors, parseTeams, type InvestorRow, type TeamRow } from "@/lib/csv";
 import type { Investor, Team, Vote } from "@/lib/types";
 import { ErrorBox, LiveDot, Loading } from "@/components/Status";
-import VoteList from "@/components/VoteList";
+import ThumbButton from "@/components/ThumbButton";
 
-type Section = "vote" | "results" | "participation" | "log" | "upload" | "manage";
+type Section = "results" | "participation" | "log" | "upload" | "manage";
 
 const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
 
@@ -127,12 +127,19 @@ export default function AdminPage() {
             <span className="block truncate">{nextTeam ? `Next team: ${nextTeam.name} ▶` : "Last team"}</span>
           </button>
         </div>
+        <AdminThumb
+          team={teams.find((t) => t.id === settings?.current_team_id)}
+          investors={investors}
+          count={counts.get(settings?.current_team_id ?? "") ?? 0}
+          hasVoted={hasVoted}
+          toggleVote={toggleVote}
+          onAdded={reload}
+        />
       </div>
 
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4">
         {(
           [
-            ["vote", "Vote"],
             ["results", "Results"],
             ["participation", "Participation"],
             ["log", "Vote log"],
@@ -223,17 +230,6 @@ export default function AdminPage() {
         </Card>
       )}
 
-      {section === "vote" && (
-        <AdminVote
-          teams={teams}
-          investors={investors}
-          counts={counts}
-          presentingId={settings?.current_team_id}
-          hasVoted={hasVoted}
-          toggleVote={toggleVote}
-          onAdded={reload}
-        />
-      )}
       {section === "upload" && <Upload onDone={reload} />}
       {section === "manage" && <Manage teams={teams} investors={investors} votes={votes} onDone={reload} />}
     </div>
@@ -242,27 +238,25 @@ export default function AdminPage() {
 
 const VOTER_KEY = "demo-day-admin-voter";
 
-/** Lets the admin vote too, as one of the investors (normally themselves). */
-function AdminVote({
-  teams,
+const ADD_NEW = "__add__";
+
+/** The admin's own 👍 for the presenting team, cast as one of the investors (normally themselves). */
+function AdminThumb({
+  team,
   investors,
-  counts,
-  presentingId,
+  count,
   hasVoted,
   toggleVote,
   onAdded,
 }: {
-  teams: Team[];
+  team: Team | undefined;
   investors: Investor[];
-  counts: Map<string, number>;
-  presentingId: string | null | undefined;
+  count: number;
   hasVoted: (investorId: string, teamId: string) => boolean;
   toggleVote: (investorId: string, teamId: string) => void;
   onAdded: () => void;
 }) {
-  const [voterId, setVoterIdState] = useState<string>("");
-  const [newName, setNewName] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [voterId, setVoterIdState] = useState("");
 
   useEffect(() => {
     try {
@@ -276,86 +270,46 @@ function AdminVote({
     } catch {}
   };
 
-  const voter = investors.find((i) => i.id === voterId);
-  const myThumbs = voter ? teams.filter((t) => hasVoted(voter.id, t.id)).length : 0;
-
-  const addMe = async () => {
-    const name = newName.trim();
+  const addName = async () => {
+    const name = prompt("Your name (added to the investor list):")?.trim();
     if (!name) return;
-    setBusy(true);
     const { error } = await supabase.rpc("import_roster", { p_teams: [], p_investors: [{ name }] });
     const { data } = error
       ? { data: null }
       : await supabase.from("investors").select("id").ilike("name", name).limit(1).maybeSingle();
-    setBusy(false);
     if (error || !data) {
       alert(`Couldn't add investor: ${error?.message ?? "not found"}`);
       return;
     }
     setVoterId(data.id);
-    setNewName("");
     onAdded();
   };
 
+  const voter = investors.find((i) => i.id === voterId);
+  const on = !!voter && !!team && hasVoted(voter.id, team.id);
+
   return (
-    <div className="space-y-4">
-      <div className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-        <label htmlFor="admin-voter" className="text-sm font-semibold">
-          Vote as
+    <div className="mt-3 flex items-center gap-3 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+      <div className="min-w-0 flex-1">
+        <label htmlFor="admin-voter" className="block text-xs font-semibold text-zinc-500">
+          Your vote{team ? ` for ${team.name}` : ""} · 👍 {count}
         </label>
-        <span className="block text-xs text-zinc-500">
-          Your votes count like any investor&apos;s and show up under this name.
-        </span>
         <select
           id="admin-voter"
           value={voter ? voter.id : ""}
-          onChange={(e) => setVoterId(e.target.value)}
-          className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
+          onChange={(e) => (e.target.value === ADD_NEW ? addName() : setVoterId(e.target.value))}
+          className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
         >
-          <option value="">— Pick your name —</option>
+          <option value="">— Vote as… —</option>
           {investors.map((i) => (
             <option key={i.id} value={i.id}>
               {i.name}
             </option>
           ))}
+          <option value={ADD_NEW}>+ Add my name…</option>
         </select>
-        <form
-          className="mt-2 flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            addMe();
-          }}
-        >
-          <input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="Not listed? Add your name"
-            className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-          />
-          <button
-            disabled={!newName.trim() || busy}
-            className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-40 dark:bg-white dark:text-zinc-900"
-          >
-            {busy ? "Adding…" : "Add"}
-          </button>
-        </form>
-        {voter && (
-          <p className="mt-2 text-sm text-zinc-500">
-            Voting as <b className="text-zinc-900 dark:text-zinc-100">{voter.name}</b> · {myThumbs} thumb
-            {myThumbs === 1 ? "" : "s"} given
-          </p>
-        )}
       </div>
-
-      {voter && (
-        <VoteList
-          teams={teams}
-          presentingId={presentingId}
-          counts={counts}
-          isOn={(teamId) => hasVoted(voter.id, teamId)}
-          onToggle={(teamId) => toggleVote(voter.id, teamId)}
-        />
-      )}
+      <ThumbButton on={on} disabled={!voter || !team} onClick={() => voter && team && toggleVote(voter.id, team.id)} />
     </div>
   );
 }
