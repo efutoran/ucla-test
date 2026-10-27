@@ -32,7 +32,15 @@ export default function TeamPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold">{team.name}</h1>
-          {team.slot && <p className="text-sm text-zinc-500">Presenting at {when(team)}</p>}
+          {team.description && <p className="text-zinc-600 dark:text-zinc-300">{team.description}</p>}
+          {team.members && (
+            <p className="mt-0.5 text-sm text-zinc-500">
+              <span aria-hidden>👥 </span>
+              <span className="sr-only">Team members: </span>
+              {team.members}
+            </p>
+          )}
+          {team.slot && <p className="mt-0.5 text-sm text-zinc-500">Presenting at {when(team)}</p>}
         </div>
         <LiveDot live={live} />
       </div>
