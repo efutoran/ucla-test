@@ -5,7 +5,7 @@
 drop function if exists reset_event(jsonb, jsonb);
 drop function if exists import_roster(jsonb, jsonb);
 drop function if exists delete_roster(uuid[], uuid[]);
-drop table if exists votes, teams, time_slots, investors, settings cascade;
+drop table if exists audience, votes, teams, time_slots, investors, settings cascade;
 
 create table settings (
   id int primary key default 1 check (id = 1),
@@ -41,6 +41,17 @@ create table votes (
 );
 -- So realtime DELETE events carry investor_id + team_id
 alter table votes replica identity full;
+
+-- Who had the app open while each team was presenting (one row per investor per team).
+-- Written by investors' phones; the admin Results tab shows the count as "~N watching".
+create table audience (
+  team_id uuid not null references teams (id) on delete cascade,
+  investor_id uuid not null references investors (id) on delete cascade,
+  first_seen_at timestamptz not null default now(),
+  primary key (team_id, investor_id)
+);
+alter table audience enable row level security;
+create policy "open" on audience for all using (true) with check (true);
 
 -- Security is intentionally open (per requirements): anyone with the anon key can read/write.
 alter table settings enable row level security;

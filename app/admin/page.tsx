@@ -21,6 +21,7 @@ export default function AdminPage() {
     useEventData();
   const [section, setSection] = useState<Section>("results");
   const [openTeam, setOpenTeam] = useState<string | null>(null);
+  const audience = useAudienceCounts();
 
   const investorName = useMemo(() => new Map(investors.map((i) => [i.id, i.name])), [investors]);
   const teamById = useMemo(() => new Map(teams.map((t) => [t.id, t])), [teams]);
@@ -47,13 +48,14 @@ export default function AdminPage() {
 
   const exportResults = () =>
     downloadCsv("results.csv", [
-      ["rank", "team", "date", "slot", "thumbs", "voters"],
+      ["rank", "team", "date", "slot", "thumbs", "approx_watching", "voters"],
       ...ranked.map((r) => [
         r.rank,
         r.team.name,
         r.team.slot_date ?? "",
         r.team.slot ?? "",
         r.count,
+        audience.get(r.team.id) ?? 0,
         votes
           .filter((v) => v.team_id === r.team.id)
           .map((v) => investorName.get(v.investor_id))
@@ -161,6 +163,9 @@ export default function AdminPage() {
 
       {section === "results" && (
         <Card title="Results by team" action={<ExportButton onClick={exportResults} />}>
+          <p className="border-b border-zinc-200 px-4 py-2 text-xs text-zinc-500 dark:border-zinc-800">
+            👀 ≈ unique signed-in investors who had the app open while that team was &ldquo;Now presenting&rdquo;.
+          </p>
           <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
             {ranked.map((r) => {
               const voters = votes.filter((v) => v.team_id === r.team.id);
@@ -176,7 +181,10 @@ export default function AdminPage() {
                       <span className="block truncate font-medium">{r.team.name}</span>
                       <span className="block text-xs text-zinc-500">{when(r.team, true)}</span>
                     </span>
-                    <span className="font-bold tabular-nums">👍 {r.count}</span>
+                    <span className="text-right">
+                      <span className="block font-bold tabular-nums">👍 {r.count}</span>
+                      <AudienceLine watching={audience.get(r.team.id) ?? 0} thumbs={r.count} />
+                    </span>
                     <span className="text-zinc-400">{open ? "▾" : "▸"}</span>
                   </button>
                   {open && (
@@ -233,6 +241,34 @@ export default function AdminPage() {
       {section === "upload" && <Upload onDone={reload} />}
       {section === "manage" && <Manage teams={teams} investors={investors} votes={votes} onDone={reload} />}
     </div>
+  );
+}
+
+/** Approximate audience per team (rows in `audience`), refreshed every 15s while open. */
+function useAudienceCounts() {
+  const [counts, setCounts] = useState<Map<string, number>>(new Map());
+  useEffect(() => {
+    const load = async () => {
+      const { data } = await supabase.from("audience").select("team_id").limit(100000);
+      if (!data) return;
+      const c = new Map<string, number>();
+      for (const row of data as { team_id: string }[]) c.set(row.team_id, (c.get(row.team_id) ?? 0) + 1);
+      setCounts(c);
+    };
+    load();
+    const timer = setInterval(load, 15000);
+    return () => clearInterval(timer);
+  }, []);
+  return counts;
+}
+
+function AudienceLine({ watching, thumbs }: { watching: number; thumbs: number }) {
+  if (!watching) return <span className="block text-xs text-zinc-400">👀 —</span>;
+  const pct = Math.min(100, Math.round((thumbs / watching) * 100));
+  return (
+    <span className="block whitespace-nowrap text-xs text-zinc-500 tabular-nums">
+      👀 ~{watching} · {pct}%
+    </span>
   );
 }
 
