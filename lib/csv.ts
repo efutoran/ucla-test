@@ -1,6 +1,6 @@
 import Papa from "papaparse";
 
-export type TeamRow = { name: string; date: string; slot: string; description: string };
+export type TeamRow = { name: string; date: string; slot: string; description: string; members: string };
 export type InvestorRow = { name: string };
 
 function parse(file: File): Promise<Record<string, string>[]> {
@@ -20,7 +20,7 @@ const pick = (row: Record<string, string>, keys: string[]) => {
   return "";
 };
 
-/** Columns: team (or name), date, slot (or time slot / time), description (optional). */
+/** Columns: team (or name), date, slot (or time slot / time), description, members (optional). */
 export async function parseTeams(file: File): Promise<TeamRow[]> {
   const rows = await parse(file);
   return rows
@@ -28,7 +28,8 @@ export async function parseTeams(file: File): Promise<TeamRow[]> {
       name: pick(r, ["team", "team name", "name"]),
       date: pick(r, ["date", "day"]),
       slot: pick(r, ["slot", "time slot", "time", "session"]),
-      description: pick(r, ["description", "desc", "tagline"]),
+      description: pick(r, ["description", "desc", "tagline", "one liner"]),
+      members: pick(r, ["members", "team members", "founders"]),
     }))
     .filter((r) => r.name);
 }

@@ -40,7 +40,12 @@ export default function LeaderboardPage() {
             />
             <div className="relative flex items-center gap-3 px-4 py-3">
               <span className="w-8 text-lg font-bold tabular-nums text-zinc-400">{r.rank}</span>
-              <p className="min-w-0 flex-1 truncate font-semibold">{r.team.name}</p>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold">{r.team.name}</p>
+                {r.team.description && (
+                  <p className="text-sm text-zinc-600 dark:text-zinc-400">{r.team.description}</p>
+                )}
+              </div>
               <span className="text-lg font-bold tabular-nums">👍 {r.count}</span>
             </div>
           </li>

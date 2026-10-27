@@ -261,14 +261,14 @@ function Upload({ onDone }: { onDone: () => void }) {
       <div key={formKey} className="space-y-4 p-4">
         <ul className="list-disc space-y-1 pl-5 text-sm text-zinc-600 dark:text-zinc-400">
           <li>New names are added. Nothing is deleted. Use the Delete tab for that.</li>
-          <li>A team with the same name gets its date, slot and description replaced. Its votes are kept.</li>
+          <li>A team with the same name gets its date, slot, description and members replaced. Its votes are kept.</li>
           <li>An investor with the same name is skipped, so their votes are kept.</li>
           <li>Names match regardless of upper/lower case. You can upload just one of the files.</li>
         </ul>
 
         <FilePicker
           label="Teams CSV"
-          hint="Columns: team, date, slot, description (optional). Date is admin-only, e.g. 10/28."
+          hint="Columns: team, date, slot, description (one-liner), members. Date is admin-only, e.g. 10/28. Quote the members list if it has commas."
           onFile={async (f) => setTeamRows(await parseTeams(f))}
           summary={teamRows && `${teamRows.length} teams`}
         />

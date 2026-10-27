@@ -7,9 +7,9 @@ Live thumbs-up voting for pitch day, like the one YC investors use at demo day. 
 | Screen | Who | What they see |
 |---|---|---|
 | `/` Sign in | Everyone | Investors pick their name, teams pick their team, admin enters the password |
-| `/vote` | Investors | The "now presenting" team pinned on top, then every team in presentation order. A 👍 toggle per team and live counts. |
+| `/vote` | Investors | The "now presenting" team pinned on top, then every team in presentation order. Each card shows the team name, one-liner and members, with a 👍 toggle and live count. |
 | `/team` | Teams | Their live thumb count, overall rank, **names of the investors who thumbed them** |
-| `/leaderboard` | Everyone | Live ranking of all teams with counts only. **No voter names.** |
+| `/leaderboard` | Everyone | Live ranking of all teams: name, one-liner and count (no team members). **No voter names.** |
 | `/admin` | Admin | Totals, "now presenting" team picker, results with voter names and dates, per-investor participation, full vote log, CSV export, roster upload, delete teams/investors |
 
 There are no accounts. The chosen identity is remembered in the browser (localStorage). Per the requirements, security is intentionally open: the database accepts reads and writes from anyone with the public key.
@@ -38,17 +38,17 @@ There are no accounts. The chosen identity is remembered in the browser (localSt
 ### 3. Load the roster
 Open the app and sign in as **Admin**. Go to **Upload**, choose one or both CSVs, and press **Upload**. Uploads never wipe anything:
 - **New names** are added.
-- **A team with the same name** (case-insensitive) gets its date, slot and description replaced. Its votes are kept.
+- **A team with the same name** (case-insensitive) gets its date, slot, description and members replaced. Its votes are kept.
 - **An investor with the same name** is skipped, so their votes and stats are kept.
 
 To remove old sections or dummy data, use the **Delete** tab. You can tick a whole date's teams at once, or pick individual investors. Deleting removes their votes too.
 
-**teams.csv**: `team,date,slot,description` (description is optional). There's one team per slot. The date (e.g. `10/28`) only appears on admin screens.
+**teams.csv**: `team,date,slot,description,members`. `description` is the team's one-liner, and `description` and `members` are optional. There's one team per slot. The date (e.g. `10/28`) only appears on admin screens. Put quotes around the members list when it contains commas.
 ```csv
-team,date,slot,description
-Acme Robotics,10/28,10:00,Warehouse robots for small businesses
-Bruin Bites,10/28,10:10,Late-night food delivery for campus
-DocuMind,11/4,10:00,AI paperwork for clinics
+team,date,slot,description,members
+Acme Robotics,10/28,10:00,Warehouse robots for small businesses,"Alice Wu, Ben Ortiz, Chloe Park"
+Bruin Bites,10/28,10:10,Late-night food delivery for campus,"Dev Patel, Emma Rossi"
+DocuMind,11/4,10:00,AI paperwork for clinics,"Ivan Petrov, Jia Li"
 ```
 
 **investors.csv**: `name`
@@ -73,6 +73,6 @@ npm run dev                  # http://localhost:3000
 ```
 
 ## How it works
-- **Tables:** `teams` (with `slot_date` and `slot`), `investors`, `votes` (primary key `(investor_id, team_id)`, so there's one thumb per investor per team), and `settings` (holds the now-presenting team and a roster version).
+- **Tables:** `teams` (with `slot_date`, `slot`, `description` and `members`), `investors`, `votes` (primary key `(investor_id, team_id)`, so there's one thumb per investor per team), and `settings` (holds the now-presenting team and a roster version).
 - **Realtime:** clients subscribe to inserts and deletes on `votes` and compute the counts locally.
 - **Roster changes:** `import_roster(teams, investors)` adds or updates rows, and `delete_roster(team_ids, investor_ids)` deletes rows and their votes. Both bump `settings.roster_updated_at`, which tells every open client to reload.

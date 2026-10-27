@@ -30,7 +30,14 @@ export default function VotePage() {
       >
         <div className="min-w-0 flex-1">
           <p className={`truncate font-semibold ${highlight ? "text-xl" : "text-lg"}`}>{t.name}</p>
-          {t.description && <p className="text-sm text-zinc-500">{t.description}</p>}
+          {t.description && <p className="text-sm text-zinc-600 dark:text-zinc-300">{t.description}</p>}
+          {t.members && (
+            <p className="mt-0.5 text-xs text-zinc-500">
+              <span aria-hidden>👥 </span>
+              <span className="sr-only">Team members: </span>
+              {t.members}
+            </p>
+          )}
           <p className="mt-1 text-sm">
             <span className="font-medium text-orange-600 dark:text-orange-400">👍 {counts.get(t.id) ?? 0}</span>
             {t.slot && <span className="ml-2 text-zinc-400">{when(t)}</span>}

@@ -3,7 +3,8 @@ export type Team = {
   name: string;
   slot_date: string | null; // e.g. "10/28" — admin only
   slot: string | null; // e.g. "10:00"
-  description: string | null;
+  description: string | null; // one-liner
+  members: string | null; // as entered in the CSV, e.g. "Alice Wu, Ben Ortiz"
   created_at: string;
 };
 export type Investor = { id: string; name: string; created_at: string };

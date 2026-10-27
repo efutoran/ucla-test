@@ -20,7 +20,8 @@ create table teams (
   name text not null,
   slot_date text,   -- e.g. "10/28" (shown to admin only)
   slot text,        -- e.g. "10:00"
-  description text,
+  description text, -- one-liner
+  members text,     -- e.g. "Alice Wu, Ben Ortiz" (shown as entered)
   created_at timestamptz not null default now()
 );
 create unique index teams_name_lower_key on teams (lower(name));
@@ -55,9 +56,9 @@ create policy "open" on votes for all using (true) with check (true);
 alter publication supabase_realtime add table votes, settings;
 
 -- Add/update teams and investors from the admin's CSV upload. Nothing is wiped:
---   * team with the same name (case-insensitive) -> its date/slot/description are replaced, votes kept
+--   * team with the same name (case-insensitive) -> its date/slot/description/members are replaced, votes kept
 --   * investor with the same name (case-insensitive) -> ignored, so their votes/stats are kept
--- p_teams:     [{ "name": "...", "date": "10/28", "slot": "10:00", "description": "..." }, ...]
+-- p_teams:     [{ "name": "...", "date": "10/28", "slot": "10:00", "description": "...", "members": "..." }, ...]
 -- p_investors: [{ "name": "..." }, ...]
 create or replace function import_roster(p_teams jsonb, p_investors jsonb)
 returns jsonb
@@ -83,12 +84,19 @@ begin
       set name = nm,
           slot_date = nullif(trim(r ->> 'date'), ''),
           slot = nullif(trim(r ->> 'slot'), ''),
-          description = nullif(trim(r ->> 'description'), '')
+          description = nullif(trim(r ->> 'description'), ''),
+          members = nullif(trim(r ->> 'members'), '')
       where id = existing;
       teams_updated := teams_updated + 1;
     else
-      insert into teams (name, slot_date, slot, description)
-      values (nm, nullif(trim(r ->> 'date'), ''), nullif(trim(r ->> 'slot'), ''), nullif(trim(r ->> 'description'), ''));
+      insert into teams (name, slot_date, slot, description, members)
+      values (
+        nm,
+        nullif(trim(r ->> 'date'), ''),
+        nullif(trim(r ->> 'slot'), ''),
+        nullif(trim(r ->> 'description'), ''),
+        nullif(trim(r ->> 'members'), '')
+      );
       teams_added := teams_added + 1;
     end if;
   end loop;

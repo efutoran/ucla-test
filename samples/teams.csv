@@ -1,7 +1,7 @@
-team,date,slot,description
-Acme Robotics,10/28,10:00,Warehouse robots for small businesses
-Bruin Bites,10/28,10:10,Late-night food delivery for campus
-CarbonLoop,10/28,10:20,Carbon accounting for SMBs
-DocuMind,11/4,10:00,AI paperwork for clinics
-EcoThreads,11/4,10:10,Resale marketplace for athletic wear
-FinFlow,11/4,10:20,Cash-flow forecasting for freelancers
+team,date,slot,description,members
+Acme Robotics,10/28,10:00,Warehouse robots for small businesses,"Alice Wu, Ben Ortiz, Chloe Park"
+Bruin Bites,10/28,10:10,Late-night food delivery for campus,"Dev Patel, Emma Rossi"
+CarbonLoop,10/28,10:20,Carbon accounting for SMBs,"Farah Khan, Gabe Silva, Hana Mori"
+DocuMind,11/4,10:00,AI paperwork for clinics,"Ivan Petrov, Jia Li"
+EcoThreads,11/4,10:10,Resale marketplace for athletic wear,"Kai Nguyen, Lena Fischer, Marco Ruiz"
+FinFlow,11/4,10:20,Cash-flow forecasting for freelancers,"Nadia Haddad, Omar Said"
