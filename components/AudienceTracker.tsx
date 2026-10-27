@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { recordWatching } from "@/lib/audience";
 import { useIdentity } from "@/lib/identity";
 import type { Settings } from "@/lib/types";
 
@@ -17,17 +18,7 @@ export default function AudienceTracker() {
   useEffect(() => {
     if (!investorId) return;
     let currentTeam: string | null = null;
-    const recorded = new Set<string>();
-
-    const record = async () => {
-      const teamId = currentTeam;
-      if (!teamId || recorded.has(teamId) || document.visibilityState !== "visible") return;
-      recorded.add(teamId);
-      const { error } = await supabase
-        .from("audience")
-        .upsert({ team_id: teamId, investor_id: investorId }, { onConflict: "team_id,investor_id", ignoreDuplicates: true });
-      if (error) recorded.delete(teamId); // retry on the next trigger
-    };
+    const record = () => currentTeam && recordWatching(currentTeam, investorId);
 
     supabase
       .from("settings")

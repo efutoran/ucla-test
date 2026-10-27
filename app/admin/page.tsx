@@ -6,6 +6,7 @@ import { useEventData } from "@/lib/useEventData";
 import { useRole } from "@/lib/useRole";
 import { useAdminAccess } from "@/lib/adminAccess";
 import { isHiddenFromViewer } from "@/lib/reserved";
+import { recordWatching } from "@/lib/audience";
 import { rankTeams } from "@/lib/rank";
 import { when } from "@/lib/schedule";
 import { downloadCsv, parseInvestors, parseTeams, type InvestorRow, type TeamRow } from "@/lib/csv";
@@ -23,18 +24,24 @@ export default function AdminPage() {
   const { teams, settings, loading, error, live, reload, setCurrentTeam, hasVoted, toggleVote } = data;
   const [section, setSection] = useState<Section>("results");
   const [openTeam, setOpenTeam] = useState<string | null>(null);
-  const audience = useAudienceCounts();
+  const audienceRows = useAudienceRows();
   const canEdit = useAdminAccess() === "full";
 
   // The view-only console leaves out some investors (the professor) and their votes entirely
-  const { investors, votes, counts } = useMemo(() => {
-    if (canEdit) return { investors: data.investors, votes: data.votes, counts: data.counts };
+  const { investors, votes, counts, hidden } = useMemo(() => {
+    if (canEdit) return { investors: data.investors, votes: data.votes, counts: data.counts, hidden: new Set<string>() };
     const hidden = new Set(data.investors.filter((i) => isHiddenFromViewer(i.name)).map((i) => i.id));
     const visibleVotes = data.votes.filter((v) => !hidden.has(v.investor_id));
     const c = new Map<string, number>();
     for (const v of visibleVotes) c.set(v.team_id, (c.get(v.team_id) ?? 0) + 1);
-    return { investors: data.investors.filter((i) => !hidden.has(i.id)), votes: visibleVotes, counts: c };
+    return { investors: data.investors.filter((i) => !hidden.has(i.id)), votes: visibleVotes, counts: c, hidden };
   }, [canEdit, data.investors, data.votes, data.counts]);
+
+  const audience = useMemo(() => {
+    const c = new Map<string, number>();
+    for (const row of audienceRows) if (!hidden.has(row.investor_id)) c.set(row.team_id, (c.get(row.team_id) ?? 0) + 1);
+    return c;
+  }, [audienceRows, hidden]);
 
   const investorName = useMemo(() => new Map(investors.map((i) => [i.id, i.name])), [investors]);
   const teamById = useMemo(() => new Map(teams.map((t) => [t.id, t])), [teams]);
@@ -275,22 +282,19 @@ export default function AdminPage() {
   );
 }
 
-/** Approximate audience per team (rows in `audience`), refreshed every 15s while open. */
-function useAudienceCounts() {
-  const [counts, setCounts] = useState<Map<string, number>>(new Map());
+/** Rows of `audience` (who watched which presentation), refreshed every 15s while open. */
+function useAudienceRows() {
+  const [rows, setRows] = useState<{ team_id: string; investor_id: string }[]>([]);
   useEffect(() => {
     const load = async () => {
-      const { data } = await supabase.from("audience").select("team_id").limit(100000);
-      if (!data) return;
-      const c = new Map<string, number>();
-      for (const row of data as { team_id: string }[]) c.set(row.team_id, (c.get(row.team_id) ?? 0) + 1);
-      setCounts(c);
+      const { data } = await supabase.from("audience").select("team_id, investor_id").limit(100000);
+      if (data) setRows(data as { team_id: string; investor_id: string }[]);
     };
     load();
     const timer = setInterval(load, 15000);
     return () => clearInterval(timer);
   }, []);
-  return counts;
+  return rows;
 }
 
 function AudienceLine({ watching, thumbs }: { watching: number; thumbs: number }) {
@@ -356,6 +360,17 @@ function AdminThumb({
 
   const voter = investors.find((i) => i.id === voterId);
   const on = !!voter && !!team && hasVoted(voter.id, team.id);
+
+  // An admin with a "Vote as" name selected counts as watching the presenting team, vote or not
+  const watcherId = readOnly ? null : voter?.id;
+  const teamId = team?.id;
+  useEffect(() => {
+    if (!watcherId || !teamId) return;
+    const record = () => recordWatching(teamId, watcherId);
+    record();
+    document.addEventListener("visibilitychange", record);
+    return () => document.removeEventListener("visibilitychange", record);
+  }, [watcherId, teamId]);
 
   return (
     <div className="mt-3 flex items-center gap-3 border-t border-zinc-200 pt-3 dark:border-zinc-800">
