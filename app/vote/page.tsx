@@ -3,10 +3,8 @@
 import { useMemo } from "react";
 import { useEventData } from "@/lib/useEventData";
 import { useRole } from "@/lib/useRole";
-import { when } from "@/lib/schedule";
-import type { Team } from "@/lib/types";
-import ThumbButton from "@/components/ThumbButton";
-import { Empty, ErrorBox, LiveDot, Loading } from "@/components/Status";
+import VoteList from "@/components/VoteList";
+import { ErrorBox, LiveDot, Loading } from "@/components/Status";
 
 export default function VotePage() {
   const { teams, investors, counts, settings, loading, error, live, hasVoted, toggleVote } = useEventData();
@@ -17,36 +15,6 @@ export default function VotePage() {
   if (loading || !me) return <Loading />;
 
   const myThumbs = teams.filter((t) => hasVoted(me.id, t.id)).length;
-  const presenting = teams.find((t) => t.id === settings?.current_team_id);
-
-  const card = (t: Team, highlight = false) => {
-    const on = hasVoted(me.id, t.id);
-    return (
-      <li
-        key={t.id}
-        className={`flex items-center gap-3 rounded-2xl border bg-white p-4 dark:bg-zinc-900 ${
-          highlight ? "border-2 border-orange-500 shadow-lg shadow-orange-500/10" : on ? "border-orange-400" : "border-zinc-200 dark:border-zinc-800"
-        }`}
-      >
-        <div className="min-w-0 flex-1">
-          <p className={`truncate font-semibold ${highlight ? "text-xl" : "text-lg"}`}>{t.name}</p>
-          {t.description && <p className="text-sm text-zinc-600 dark:text-zinc-300">{t.description}</p>}
-          {t.members && (
-            <p className="mt-0.5 text-xs text-zinc-500">
-              <span aria-hidden>👥 </span>
-              <span className="sr-only">Team members: </span>
-              {t.members}
-            </p>
-          )}
-          <p className="mt-1 text-sm">
-            <span className="font-medium text-orange-600 dark:text-orange-400">👍 {counts.get(t.id) ?? 0}</span>
-            {t.slot && <span className="ml-2 text-zinc-400">{when(t)}</span>}
-          </p>
-        </div>
-        <ThumbButton on={on} onClick={() => toggleVote(me.id, t.id)} />
-      </li>
-    );
-  };
 
   return (
     <div className="space-y-4">
@@ -63,20 +31,13 @@ export default function VotePage() {
         </div>
       </div>
 
-      {presenting && (
-        <section>
-          <h2 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-orange-600 dark:text-orange-400">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-orange-500" /> Now presenting
-          </h2>
-          <ul>{card(presenting, true)}</ul>
-        </section>
-      )}
-
-      <section>
-        <h2 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-500">All teams</h2>
-        {teams.length === 0 && <Empty>No teams yet.</Empty>}
-        <ul className="space-y-3">{teams.filter((t) => t.id !== presenting?.id).map((t) => card(t))}</ul>
-      </section>
+      <VoteList
+        teams={teams}
+        presentingId={settings?.current_team_id}
+        counts={counts}
+        isOn={(teamId) => hasVoted(me.id, teamId)}
+        onToggle={(teamId) => toggleVote(me.id, teamId)}
+      />
     </div>
   );
 }

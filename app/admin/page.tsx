@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useEventData } from "@/lib/useEventData";
 import { useRole } from "@/lib/useRole";
@@ -9,14 +9,16 @@ import { when } from "@/lib/schedule";
 import { downloadCsv, parseInvestors, parseTeams, type InvestorRow, type TeamRow } from "@/lib/csv";
 import type { Investor, Team, Vote } from "@/lib/types";
 import { ErrorBox, LiveDot, Loading } from "@/components/Status";
+import VoteList from "@/components/VoteList";
 
-type Section = "results" | "participation" | "log" | "upload" | "manage";
+type Section = "vote" | "results" | "participation" | "log" | "upload" | "manage";
 
 const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
 
 export default function AdminPage() {
   const me = useRole("admin", null);
-  const { teams, investors, votes, counts, settings, loading, error, live, reload, setCurrentTeam } = useEventData();
+  const { teams, investors, votes, counts, settings, loading, error, live, reload, setCurrentTeam, hasVoted, toggleVote } =
+    useEventData();
   const [section, setSection] = useState<Section>("results");
   const [openTeam, setOpenTeam] = useState<string | null>(null);
 
@@ -130,6 +132,7 @@ export default function AdminPage() {
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4">
         {(
           [
+            ["vote", "Vote"],
             ["results", "Results"],
             ["participation", "Participation"],
             ["log", "Vote log"],
@@ -220,8 +223,139 @@ export default function AdminPage() {
         </Card>
       )}
 
+      {section === "vote" && (
+        <AdminVote
+          teams={teams}
+          investors={investors}
+          counts={counts}
+          presentingId={settings?.current_team_id}
+          hasVoted={hasVoted}
+          toggleVote={toggleVote}
+          onAdded={reload}
+        />
+      )}
       {section === "upload" && <Upload onDone={reload} />}
       {section === "manage" && <Manage teams={teams} investors={investors} votes={votes} onDone={reload} />}
+    </div>
+  );
+}
+
+const VOTER_KEY = "demo-day-admin-voter";
+
+/** Lets the admin vote too, as one of the investors (normally themselves). */
+function AdminVote({
+  teams,
+  investors,
+  counts,
+  presentingId,
+  hasVoted,
+  toggleVote,
+  onAdded,
+}: {
+  teams: Team[];
+  investors: Investor[];
+  counts: Map<string, number>;
+  presentingId: string | null | undefined;
+  hasVoted: (investorId: string, teamId: string) => boolean;
+  toggleVote: (investorId: string, teamId: string) => void;
+  onAdded: () => void;
+}) {
+  const [voterId, setVoterIdState] = useState<string>("");
+  const [newName, setNewName] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    try {
+      setVoterIdState(localStorage.getItem(VOTER_KEY) ?? "");
+    } catch {}
+  }, []);
+  const setVoterId = (id: string) => {
+    setVoterIdState(id);
+    try {
+      localStorage.setItem(VOTER_KEY, id);
+    } catch {}
+  };
+
+  const voter = investors.find((i) => i.id === voterId);
+  const myThumbs = voter ? teams.filter((t) => hasVoted(voter.id, t.id)).length : 0;
+
+  const addMe = async () => {
+    const name = newName.trim();
+    if (!name) return;
+    setBusy(true);
+    const { error } = await supabase.rpc("import_roster", { p_teams: [], p_investors: [{ name }] });
+    const { data } = error
+      ? { data: null }
+      : await supabase.from("investors").select("id").ilike("name", name).limit(1).maybeSingle();
+    setBusy(false);
+    if (error || !data) {
+      alert(`Couldn't add investor: ${error?.message ?? "not found"}`);
+      return;
+    }
+    setVoterId(data.id);
+    setNewName("");
+    onAdded();
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+        <label htmlFor="admin-voter" className="text-sm font-semibold">
+          Vote as
+        </label>
+        <span className="block text-xs text-zinc-500">
+          Your votes count like any investor&apos;s and show up under this name.
+        </span>
+        <select
+          id="admin-voter"
+          value={voter ? voter.id : ""}
+          onChange={(e) => setVoterId(e.target.value)}
+          className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
+        >
+          <option value="">— Pick your name —</option>
+          {investors.map((i) => (
+            <option key={i.id} value={i.id}>
+              {i.name}
+            </option>
+          ))}
+        </select>
+        <form
+          className="mt-2 flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            addMe();
+          }}
+        >
+          <input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="Not listed? Add your name"
+            className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+          />
+          <button
+            disabled={!newName.trim() || busy}
+            className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-40 dark:bg-white dark:text-zinc-900"
+          >
+            {busy ? "Adding…" : "Add"}
+          </button>
+        </form>
+        {voter && (
+          <p className="mt-2 text-sm text-zinc-500">
+            Voting as <b className="text-zinc-900 dark:text-zinc-100">{voter.name}</b> · {myThumbs} thumb
+            {myThumbs === 1 ? "" : "s"} given
+          </p>
+        )}
+      </div>
+
+      {voter && (
+        <VoteList
+          teams={teams}
+          presentingId={presentingId}
+          counts={counts}
+          isOn={(teamId) => hasVoted(voter.id, teamId)}
+          onToggle={(teamId) => toggleVote(voter.id, teamId)}
+        />
+      )}
     </div>
   );
 }
