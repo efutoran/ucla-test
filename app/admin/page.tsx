@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useEventData } from "@/lib/useEventData";
 import { useRole } from "@/lib/useRole";
 import { useAdminAccess } from "@/lib/adminAccess";
+import { isHiddenFromViewer } from "@/lib/reserved";
 import { rankTeams } from "@/lib/rank";
 import { when } from "@/lib/schedule";
 import { downloadCsv, parseInvestors, parseTeams, type InvestorRow, type TeamRow } from "@/lib/csv";
@@ -18,12 +19,22 @@ const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "nume
 
 export default function AdminPage() {
   const me = useRole("admin", null);
-  const { teams, investors, votes, counts, settings, loading, error, live, reload, setCurrentTeam, hasVoted, toggleVote } =
-    useEventData();
+  const data = useEventData();
+  const { teams, settings, loading, error, live, reload, setCurrentTeam, hasVoted, toggleVote } = data;
   const [section, setSection] = useState<Section>("results");
   const [openTeam, setOpenTeam] = useState<string | null>(null);
   const audience = useAudienceCounts();
   const canEdit = useAdminAccess() === "full";
+
+  // The view-only console leaves out some investors (the professor) and their votes entirely
+  const { investors, votes, counts } = useMemo(() => {
+    if (canEdit) return { investors: data.investors, votes: data.votes, counts: data.counts };
+    const hidden = new Set(data.investors.filter((i) => isHiddenFromViewer(i.name)).map((i) => i.id));
+    const visibleVotes = data.votes.filter((v) => !hidden.has(v.investor_id));
+    const c = new Map<string, number>();
+    for (const v of visibleVotes) c.set(v.team_id, (c.get(v.team_id) ?? 0) + 1);
+    return { investors: data.investors.filter((i) => !hidden.has(i.id)), votes: visibleVotes, counts: c };
+  }, [canEdit, data.investors, data.votes, data.counts]);
 
   const investorName = useMemo(() => new Map(investors.map((i) => [i.id, i.name])), [investors]);
   const teamById = useMemo(() => new Map(teams.map((t) => [t.id, t])), [teams]);
