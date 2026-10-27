@@ -3,12 +3,17 @@
 import { useMemo } from "react";
 import { useEventData } from "@/lib/useEventData";
 import { useRole } from "@/lib/useRole";
+import { isReservedInvestor } from "@/lib/reserved";
 import VoteList from "@/components/VoteList";
 import { ErrorBox, LiveDot, Loading } from "@/components/Status";
 
 export default function VotePage() {
   const { teams, investors, counts, settings, loading, error, live, hasVoted, toggleVote } = useEventData();
-  const ids = useMemo(() => (loading || error ? null : investors.map((i) => i.id)), [loading, error, investors]);
+  // Reserved names are excluded, so anyone already signed in as one is sent back to sign-in
+  const ids = useMemo(
+    () => (loading || error ? null : investors.filter((i) => !isReservedInvestor(i.name)).map((i) => i.id)),
+    [loading, error, investors],
+  );
   const me = useRole("investor", ids);
 
   if (error) return <ErrorBox message={error} />;

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { adminLogin } from "@/lib/adminAuth";
 import { useIdentity } from "@/lib/identity";
 import { useEventData } from "@/lib/useEventData";
+import { isReservedInvestor } from "@/lib/reserved";
 import { Empty, ErrorBox, Loading } from "@/components/Status";
 
 type Tab = "investor" | "team" | "admin";
@@ -37,7 +38,8 @@ export default function SignIn() {
 
   const filteredInvestors = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q ? investors.filter((i) => i.name.toLowerCase().includes(q)) : investors;
+    const pickable = investors.filter((i) => !isReservedInvestor(i.name));
+    return q ? pickable.filter((i) => i.name.toLowerCase().includes(q)) : pickable;
   }, [investors, query]);
 
   if (!loaded || identity) return <Loading />;
