@@ -13,6 +13,7 @@ import { downloadCsv, parseInvestors, parseTeams, type InvestorRow, type TeamRow
 import type { Investor, Team, Vote } from "@/lib/types";
 import { ErrorBox, LiveDot, Loading } from "@/components/Status";
 import ThumbButton from "@/components/ThumbButton";
+import PitchTimer from "@/components/PitchTimer";
 
 type Section = "results" | "participation" | "log" | "upload" | "manage";
 
@@ -163,6 +164,7 @@ export default function AdminPage() {
             <span className="block truncate">{nextTeam ? `Next team: ${nextTeam.name} ▶` : "Last team"}</span>
           </button>
         </div>
+        <PitchTimer />
         <AdminThumb
           team={presentingTeam}
           investors={investors}
