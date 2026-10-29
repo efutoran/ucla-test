@@ -6,7 +6,8 @@ import { useEventData } from "@/lib/useEventData";
 import { useRole } from "@/lib/useRole";
 import { useAdminAccess } from "@/lib/adminAccess";
 import { isHiddenFromViewer } from "@/lib/reserved";
-import { AUDIENCE_RECORDED, recordWatching } from "@/lib/audience";
+import { recordWatching } from "@/lib/audience";
+import { useAudienceRows } from "@/lib/useAudience";
 import { rankTeams } from "@/lib/rank";
 import { when } from "@/lib/schedule";
 import { downloadCsv, parseInvestors, parseTeams, type InvestorRow, type TeamRow } from "@/lib/csv";
@@ -298,28 +299,6 @@ export default function AdminPage() {
       )}
     </div>
   );
-}
-
-/**
- * Rows of `audience` (who watched which presentation). Refreshes right after this browser
- * records one, and every 5s for everyone else's.
- */
-function useAudienceRows() {
-  const [rows, setRows] = useState<{ team_id: string; investor_id: string }[]>([]);
-  useEffect(() => {
-    const load = async () => {
-      const { data } = await supabase.from("audience").select("team_id, investor_id").limit(100000);
-      if (data) setRows(data as { team_id: string; investor_id: string }[]);
-    };
-    load();
-    const timer = setInterval(load, 5000);
-    window.addEventListener(AUDIENCE_RECORDED, load);
-    return () => {
-      clearInterval(timer);
-      window.removeEventListener(AUDIENCE_RECORDED, load);
-    };
-  }, []);
-  return rows;
 }
 
 function VoterBreakdown({ voted, onlineNotVoted }: { voted: string[]; onlineNotVoted: string[] }) {

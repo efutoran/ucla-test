@@ -9,7 +9,7 @@ Live thumbs-up voting for pitch day, like the one YC investors use at demo day. 
 | `/` Sign in | Everyone | Investors pick their name, teams pick their team, admin enters the password |
 | `/vote` | Investors | The "now presenting" team pinned on top, then every team in presentation order. Each card shows the team name, one-liner and members, with a 👍 toggle and live count. |
 | `/team` | Teams | Their name, one-liner and members, live thumb count, overall rank, **names of the investors who thumbed them** |
-| `/leaderboard` | Everyone | Live ranking of all teams: name, one-liner and count (no team members). **No voter names.** |
+| `/leaderboard` | Everyone | Live ranking of all teams: name, one-liner and count (no team members). A toggle re-ranks by **Total 👍** or **% of audience** (thumbs ÷ people who saw the pitch). **No voter names.** |
 | `/admin` | Admin | Totals, "now presenting" team picker, results with voter names and dates, per-investor participation, full vote log, CSV export, roster upload, delete teams/investors |
 
 There are no accounts. The chosen identity is remembered in the browser (localStorage). Per the requirements, security is intentionally open: the database accepts reads and writes from anyone with the public key.
