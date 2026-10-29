@@ -38,11 +38,17 @@ export default function AdminPage() {
     return { investors: data.investors.filter((i) => !hidden.has(i.id)), votes: visibleVotes, counts: c, hidden };
   }, [canEdit, data.investors, data.votes, data.counts]);
 
-  const audience = useMemo(() => {
-    const c = new Map<string, number>();
-    for (const row of audienceRows) if (!hidden.has(row.investor_id)) c.set(row.team_id, (c.get(row.team_id) ?? 0) + 1);
-    return c;
+  // Who had the app open while each team presented (team id -> investor ids)
+  const watchers = useMemo(() => {
+    const w = new Map<string, Set<string>>();
+    for (const row of audienceRows) {
+      if (hidden.has(row.investor_id)) continue;
+      if (!w.has(row.team_id)) w.set(row.team_id, new Set());
+      w.get(row.team_id)!.add(row.investor_id);
+    }
+    return w;
   }, [audienceRows, hidden]);
+  const audience = useMemo(() => new Map([...watchers].map(([teamId, ids]) => [teamId, ids.size])), [watchers]);
 
   const investorName = useMemo(() => new Map(investors.map((i) => [i.id, i.name])), [investors]);
   const teamById = useMemo(() => new Map(teams.map((t) => [t.id, t])), [teams]);
@@ -68,21 +74,33 @@ export default function AdminPage() {
   const prevTeam = currentIndex > 0 ? teams[currentIndex - 1] : undefined;
   const participated = participation.filter((p) => p.teamIds.length > 0).length;
 
+  /** Names who voted for a team, and names who were online while it presented but didn't vote. */
+  const voterNames = (teamId: string) => {
+    const votedIds = new Set(votes.filter((v) => v.team_id === teamId).map((v) => v.investor_id));
+    const names = (ids: Iterable<string>) =>
+      [...ids].map((id) => investorName.get(id)).filter((n): n is string => !!n).sort((a, b) => a.localeCompare(b));
+    return {
+      voted: names(votedIds),
+      onlineNotVoted: names([...(watchers.get(teamId) ?? [])].filter((id) => !votedIds.has(id))),
+    };
+  };
+
   const exportResults = () =>
     downloadCsv("results.csv", [
-      ["rank", "team", "date", "slot", "thumbs", "approx_watching", "voters"],
-      ...ranked.map((r) => [
-        r.rank,
-        r.team.name,
-        r.team.slot_date ?? "",
-        r.team.slot ?? "",
-        r.count,
-        audience.get(r.team.id) ?? 0,
-        votes
-          .filter((v) => v.team_id === r.team.id)
-          .map((v) => investorName.get(v.investor_id))
-          .join("; "),
-      ]),
+      ["rank", "team", "date", "slot", "thumbs", "approx_watching", "voters", "online_not_voted"],
+      ...ranked.map((r) => {
+        const v = voterNames(r.team.id);
+        return [
+          r.rank,
+          r.team.name,
+          r.team.slot_date ?? "",
+          r.team.slot ?? "",
+          r.count,
+          audience.get(r.team.id) ?? 0,
+          v.voted.join("; "),
+          v.onlineNotVoted.join("; "),
+        ];
+      }),
     ]);
   const exportParticipation = () =>
     downloadCsv("participation.csv", [
@@ -206,7 +224,6 @@ export default function AdminPage() {
           </p>
           <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
             {ranked.map((r) => {
-              const voters = votes.filter((v) => v.team_id === r.team.id);
               const open = openTeam === r.team.id;
               return (
                 <li key={r.team.id}>
@@ -226,11 +243,7 @@ export default function AdminPage() {
                     <span className="text-zinc-400">{open ? "▾" : "▸"}</span>
                   </button>
                   {open && (
-                    <p className="px-4 pb-3 pl-13 text-sm text-zinc-600 dark:text-zinc-400">
-                      {voters.length
-                        ? voters.map((v) => investorName.get(v.investor_id)).join(", ")
-                        : "No votes yet"}
-                    </p>
+                    <VoterBreakdown {...voterNames(r.team.id)} />
                   )}
                 </li>
               );
@@ -304,6 +317,23 @@ function useAudienceRows() {
     };
   }, []);
   return rows;
+}
+
+function VoterBreakdown({ voted, onlineNotVoted }: { voted: string[]; onlineNotVoted: string[] }) {
+  const row = (label: string, names: string[], empty: string, tone: string) => (
+    <div>
+      <p className={`text-xs font-semibold ${tone}`}>
+        {label} ({names.length})
+      </p>
+      <p className="text-sm text-zinc-600 dark:text-zinc-400">{names.length ? names.join(", ") : empty}</p>
+    </div>
+  );
+  return (
+    <div className="space-y-2 px-4 pb-3 pl-13">
+      {row("👍 Voted", voted, "No votes yet", "text-orange-600 dark:text-orange-400")}
+      {row("👀 Online, didn't vote", onlineNotVoted, "Nobody", "text-zinc-500")}
+    </div>
+  );
 }
 
 function AudienceLine({ watching, thumbs }: { watching: number; thumbs: number }) {
