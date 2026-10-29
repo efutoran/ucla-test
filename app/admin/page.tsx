@@ -38,16 +38,19 @@ export default function AdminPage() {
     return { investors: data.investors.filter((i) => !hidden.has(i.id)), votes: visibleVotes, counts: c, hidden };
   }, [canEdit, data.investors, data.votes, data.counts]);
 
-  // Who had the app open while each team presented (team id -> investor ids)
+  // Who saw each team's pitch (team id -> investor ids): had the app open while it was
+  // "Now presenting", or voted for it (a vote means they saw it even if their phone missed the switch)
   const watchers = useMemo(() => {
     const w = new Map<string, Set<string>>();
-    for (const row of audienceRows) {
-      if (hidden.has(row.investor_id)) continue;
-      if (!w.has(row.team_id)) w.set(row.team_id, new Set());
-      w.get(row.team_id)!.add(row.investor_id);
-    }
+    const add = (teamId: string, investorId: string) => {
+      if (hidden.has(investorId)) return;
+      if (!w.has(teamId)) w.set(teamId, new Set());
+      w.get(teamId)!.add(investorId);
+    };
+    for (const row of audienceRows) add(row.team_id, row.investor_id);
+    for (const v of votes) add(v.team_id, v.investor_id);
     return w;
-  }, [audienceRows, hidden]);
+  }, [audienceRows, votes, hidden]);
   const audience = useMemo(() => new Map([...watchers].map(([teamId, ids]) => [teamId, ids.size])), [watchers]);
 
   const investorName = useMemo(() => new Map(investors.map((i) => [i.id, i.name])), [investors]);
@@ -220,7 +223,7 @@ export default function AdminPage() {
       {section === "results" && (
         <Card title="Results by team" action={<ExportButton onClick={exportResults} />}>
           <p className="border-b border-zinc-200 px-4 py-2 text-xs text-zinc-500 dark:border-zinc-800">
-            👀 ≈ unique signed-in investors who had the app open while that team was &ldquo;Now presenting&rdquo;.
+            👀 ≈ unique investors who saw the pitch: had the app open while that team was &ldquo;Now presenting&rdquo;, or voted for it.
           </p>
           <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
             {ranked.map((r) => {

@@ -75,6 +75,6 @@ npm run dev                  # http://localhost:3000
 
 ## How it works
 - **Tables:** `teams` (with `slot_date`, `slot`, `description` and `members`), `investors`, `audience`, `votes` (primary key `(investor_id, team_id)`, so there's one thumb per investor per team), and `settings` (holds the now-presenting team and a roster version).
-- **Audience:** while a team is "Now presenting", each signed-in investor's open app records one `audience` row for that team. So does a full admin console with a "Vote as" name selected, whether or not they vote. The Results tab shows the count (👀 ~N) and the thumbs-up rate.
+- **Audience:** while a team is "Now presenting", each signed-in investor's open app records one `audience` row for that team. It re-checks the current team when the phone wakes, when the connection comes back, and every 20s, so a locked phone doesn't miss a switch. A full admin console with a "Vote as" name selected records one too, vote or not. The Results tab's 👀 "seen" count is those rows plus anyone who voted for the team, with the thumbs-up rate next to it.
 - **Realtime:** clients subscribe to inserts and deletes on `votes` and compute the counts locally.
 - **Roster changes:** `import_roster(teams, investors)` adds or updates rows, and `delete_roster(team_ids, investor_ids)` deletes rows and their votes. Both bump `settings.roster_updated_at`, which tells every open client to reload.

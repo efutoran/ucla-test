@@ -6,10 +6,16 @@ import { recordWatching } from "@/lib/audience";
 import { useIdentity } from "@/lib/identity";
 import type { Settings } from "@/lib/types";
 
+const RECHECK_MS = 20_000;
+
 /**
  * Mounted once in the root layout. While a signed-in investor has the app open and visible,
  * records (once per team) that they were watching the "now presenting" team. The admin
  * Results tab counts these rows as the approximate audience for each presentation.
+ *
+ * Phones drop the realtime connection when locked, so the current team is re-fetched
+ * (not just remembered) whenever the page becomes visible, the connection comes back,
+ * and every 20s while visible.
  */
 export default function AudienceTracker() {
   const { identity } = useIdentity();
@@ -17,31 +23,30 @@ export default function AudienceTracker() {
 
   useEffect(() => {
     if (!investorId) return;
-    let currentTeam: string | null = null;
-    const record = () => currentTeam && recordWatching(currentTeam, investorId);
 
-    supabase
-      .from("settings")
-      .select("current_team_id")
-      .eq("id", 1)
-      .single()
-      .then(({ data }) => {
-        currentTeam = (data as Pick<Settings, "current_team_id"> | null)?.current_team_id ?? null;
-        record();
-      });
+    const recheck = async () => {
+      if (document.visibilityState !== "visible") return;
+      const { data } = await supabase.from("settings").select("current_team_id").eq("id", 1).single();
+      const teamId = (data as Pick<Settings, "current_team_id"> | null)?.current_team_id;
+      if (teamId) recordWatching(teamId, investorId);
+    };
 
+    recheck();
     const channel = supabase
       .channel("audience-tracker")
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "settings" }, (p) => {
-        currentTeam = (p.new as Settings).current_team_id;
-        record();
+        const teamId = (p.new as Settings).current_team_id;
+        if (teamId) recordWatching(teamId, investorId);
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") recheck(); // catch up after a dropped connection
+      });
 
-    const onVisible = () => record();
-    document.addEventListener("visibilitychange", onVisible);
+    const timer = setInterval(recheck, RECHECK_MS);
+    document.addEventListener("visibilitychange", recheck);
     return () => {
-      document.removeEventListener("visibilitychange", onVisible);
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", recheck);
       supabase.removeChannel(channel);
     };
   }, [investorId]);
